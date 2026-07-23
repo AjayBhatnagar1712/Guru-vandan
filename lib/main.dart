@@ -676,7 +676,9 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   PracticeTab tab = PracticeTab.home;
   SatsangSession selectedSession = _defaultSession();
-  String devoteeName = 'Bhakt';
+  String devoteeName = '';
+  bool localStateLoaded = false;
+  bool needsFullName = false;
   Map<String, Map<String, bool>> records = {};
   String? activeTrackId;
   RoutineTask? activeTrackTask;
@@ -730,7 +732,9 @@ class _DevoteeShellState extends State<DevoteeShell> {
     final savedRecords = prefs.getString(routineKey);
 
     if (savedName != null && savedName.trim().isNotEmpty) {
-      devoteeName = savedName;
+      devoteeName = savedName.trim();
+    } else {
+      needsFullName = true;
     }
 
     if (savedRecords != null) {
@@ -753,7 +757,20 @@ class _DevoteeShellState extends State<DevoteeShell> {
       }
     }
 
+    localStateLoaded = true;
     if (mounted) setState(() {});
+  }
+
+  Future<void> _saveFullName(String name) async {
+    final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(nameKey, clean);
+    if (mounted) {
+      setState(() {
+        devoteeName = clean;
+        needsFullName = false;
+      });
+    }
   }
 
   Future<void> _saveRecords() async {
@@ -937,6 +954,21 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (!localStateLoaded || needsFullName) {
+      return Scaffold(
+        body: Stack(
+          children: [
+            const Positioned.fill(child: _SacredBackground()),
+            SafeArea(
+              child: !localStateLoaded
+                  ? const _ProfileLoadingScreen()
+                  : _FullNameOnboardingScreen(onContinue: _saveFullName),
+            ),
+          ],
+        ),
+      );
+    }
+
     final screens = {
       PracticeTab.home: _HomeScreen(
         name: devoteeName,
@@ -990,14 +1022,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       ),
       PracticeTab.wisdom: _WisdomScreen(quotesStream: content.quotes()),
       PracticeTab.more: _MoreScreen(
-        name: devoteeName,
         firebaseReady: widget.firebaseReady,
-        onNameSaved: (name) async {
-          final clean = name.trim().isEmpty ? 'Bhakt' : name.trim();
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(nameKey, clean);
-          setState(() => devoteeName = clean);
-        },
         onOpenAdmin: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => AdminConsole(
@@ -1036,6 +1061,137 @@ class _DevoteeShellState extends State<DevoteeShell> {
     return hour >= 3 && hour < 12
         ? SatsangSession.morning
         : SatsangSession.evening;
+  }
+}
+
+class _ProfileLoadingScreen extends StatelessWidget {
+  const _ProfileLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        width: 58,
+        height: 58,
+        child: CircularProgressIndicator(
+          strokeWidth: 5,
+          color: AppColors.maroon,
+          backgroundColor: AppColors.rose,
+        ),
+      ),
+    );
+  }
+}
+
+class _FullNameOnboardingScreen extends StatefulWidget {
+  const _FullNameOnboardingScreen({required this.onContinue});
+
+  final ValueChanged<String> onContinue;
+
+  @override
+  State<_FullNameOnboardingScreen> createState() =>
+      _FullNameOnboardingScreenState();
+}
+
+class _FullNameOnboardingScreenState extends State<_FullNameOnboardingScreen> {
+  final controller = TextEditingController();
+  String? error;
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _continue() {
+    final clean = controller.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (clean.length < 2) {
+      setState(() => error = 'Please enter your full name.');
+      return;
+    }
+    widget.onContinue(clean);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+            decoration: _cardDecoration(color: AppColors.offWhite).copyWith(
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.deepCrimson.withValues(alpha: 0.11),
+                  blurRadius: 30,
+                  offset: const Offset(0, 18),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 118,
+                    height: 118,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.borderStrong),
+                    ),
+                    child: Image.asset('assets/images/app_icon.png',
+                        fit: BoxFit.contain),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Welcome to Guruvandan',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.lora(
+                    color: AppColors.ink,
+                    fontSize: 31,
+                    height: 1.08,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Please enter your full name to begin your daily spiritual routine.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _continue(),
+                  decoration: _inputDecoration('Full name').copyWith(
+                    errorText: error,
+                    prefixIcon: const Icon(Icons.person_rounded),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: _continue,
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                  label: const Text('Begin'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(58),
+                    backgroundColor: AppColors.maroon,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2012,37 +2168,14 @@ class _WisdomQuoteCard extends StatelessWidget {
   }
 }
 
-class _MoreScreen extends StatefulWidget {
+class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
-    required this.name,
     required this.firebaseReady,
-    required this.onNameSaved,
     required this.onOpenAdmin,
   });
 
-  final String name;
   final bool firebaseReady;
-  final ValueChanged<String> onNameSaved;
   final VoidCallback onOpenAdmin;
-
-  @override
-  State<_MoreScreen> createState() => _MoreScreenState();
-}
-
-class _MoreScreenState extends State<_MoreScreen> {
-  late final TextEditingController controller;
-
-  @override
-  void initState() {
-    super.initState();
-    controller = TextEditingController(text: widget.name);
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2057,42 +2190,31 @@ class _MoreScreenState extends State<_MoreScreen> {
           padding: const EdgeInsets.all(22),
           decoration: _cardDecoration(),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Center(
-                child: Container(
-                  width: 126,
-                  height: 126,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.offWhite,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.borderStrong),
-                  ),
-                  child: Image.asset('assets/images/app_icon.png',
-                      fit: BoxFit.contain),
+              Container(
+                width: 126,
+                height: 126,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.offWhite,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.borderStrong),
                 ),
+                child: Image.asset('assets/images/app_icon.png',
+                    fit: BoxFit.contain),
               ),
               const SizedBox(height: 22),
-              Text('Devotee name',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 10),
-              TextField(
-                controller: controller,
-                decoration: _inputDecoration('Your name'),
-                textInputAction: TextInputAction.done,
+              Text(
+                'Guruvandan',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => widget.onNameSaved(controller.text),
-                icon: const Icon(Icons.verified_rounded),
-                label: const Text('Save name'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(56),
-                  backgroundColor: AppColors.maroon,
-                  textStyle: const TextStyle(
-                      fontWeight: FontWeight.w900, fontSize: 17),
-                ),
+              const SizedBox(height: 8),
+              Text(
+                'A gentle daily companion for satsang, meditation, wisdom, and routine streaks.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],
           ),
@@ -2107,14 +2229,14 @@ class _MoreScreenState extends State<_MoreScreen> {
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
               Text(
-                widget.firebaseReady
+                firebaseReady
                     ? 'Firebase is connected. Admin can upload satsang audio and publish quotes.'
                     : 'Firebase is not connected yet. The app is using bundled fallback content.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 16),
               FilledButton.tonalIcon(
-                onPressed: widget.onOpenAdmin,
+                onPressed: onOpenAdmin,
                 icon: const Icon(Icons.admin_panel_settings_rounded),
                 label: const Text('Open admin console'),
                 style: FilledButton.styleFrom(

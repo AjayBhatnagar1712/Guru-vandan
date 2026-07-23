@@ -37,7 +37,7 @@ jobs:
         run: flutter test
 
       - name: Build web
-        run: flutter build web --release --base-href /Guru-vandan/
+        run: flutter build web --release --base-href /Guru-vandan/ --no-wasm-dry-run
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
