@@ -61,6 +61,27 @@ The project currently uses Firebase project values discovered from the Android r
 
 Before production, create proper Firebase web and iOS apps in the same Firebase project and replace placeholder values in `lib/main.dart`.
 
+## Sign In Setup
+
+The app asks first-time users to sign in before entering the routine screens.
+
+Supported sign-in methods:
+
+- Google sign-in
+- Phone number OTP sign-in
+
+Enable these in Firebase Console:
+
+```text
+Firebase Console -> Authentication -> Sign-in method
+```
+
+For the live web app, also add this under Firebase authorized domains:
+
+```text
+ajaybhatnagar1712.github.io
+```
+
 ## Admin Console
 
 Open the app and go to:

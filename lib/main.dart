@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -130,7 +131,7 @@ class GuruvandanApp extends StatelessWidget {
       ),
       home: showOpening
           ? SpiritualOpening(firebaseReady: firebaseReady)
-          : DevoteeShell(firebaseReady: firebaseReady),
+          : AuthGate(firebaseReady: firebaseReady),
     );
   }
 }
@@ -436,7 +437,7 @@ class _SpiritualOpeningState extends State<SpiritualOpening>
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       child: showApp
-          ? DevoteeShell(
+          ? AuthGate(
               key: const ValueKey('devotee-shell'),
               firebaseReady: widget.firebaseReady)
           : _OpeningScreen(
@@ -657,10 +658,368 @@ class _OpeningScenePainter extends CustomPainter {
   }
 }
 
-class DevoteeShell extends StatefulWidget {
-  const DevoteeShell({required this.firebaseReady, super.key});
+class AuthGate extends StatelessWidget {
+  const AuthGate({required this.firebaseReady, super.key});
 
   final bool firebaseReady;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!firebaseReady) {
+      return const DevoteeShell(firebaseReady: false);
+    }
+
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
+      builder: (context, snapshot) {
+        final user = snapshot.data;
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            user == null) {
+          return const Scaffold(
+            body: Stack(
+              children: [
+                Positioned.fill(child: _SacredBackground()),
+                SafeArea(child: _ProfileLoadingScreen()),
+              ],
+            ),
+          );
+        }
+
+        if (user == null) {
+          return const _SignInScreen();
+        }
+
+        return DevoteeShell(
+          key: ValueKey('devotee-shell-${user.uid}'),
+          firebaseReady: firebaseReady,
+          user: user,
+        );
+      },
+    );
+  }
+}
+
+class _SignInScreen extends StatefulWidget {
+  const _SignInScreen();
+
+  @override
+  State<_SignInScreen> createState() => _SignInScreenState();
+}
+
+class _SignInScreenState extends State<_SignInScreen> {
+  final phone = TextEditingController();
+  final otp = TextEditingController();
+  ConfirmationResult? confirmationResult;
+  String? verificationId;
+  bool otpSent = false;
+  bool busy = false;
+  String? status;
+  bool statusIsError = false;
+
+  @override
+  void dispose() {
+    phone.dispose();
+    otp.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      busy = true;
+      status = null;
+      statusIsError = false;
+    });
+
+    try {
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
+      if (kIsWeb) {
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+        await FirebaseAuth.instance.signInWithProvider(provider);
+      }
+    } on FirebaseAuthException catch (error) {
+      _setError(error.message ?? 'Google sign-in failed.');
+    } catch (_) {
+      _setError('Google sign-in could not be completed.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _sendOtp() async {
+    final phoneNumber = _normalizedPhone(phone.text);
+    if (phoneNumber == null) {
+      _setError('Enter a valid phone number with country code.');
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      status = null;
+      statusIsError = false;
+    });
+
+    try {
+      if (kIsWeb) {
+        confirmationResult =
+            await FirebaseAuth.instance.signInWithPhoneNumber(phoneNumber);
+        if (mounted) {
+          setState(() {
+            otpSent = true;
+            status = 'OTP sent to $phoneNumber.';
+            statusIsError = false;
+          });
+        }
+      } else {
+        await FirebaseAuth.instance.verifyPhoneNumber(
+          phoneNumber: phoneNumber,
+          verificationCompleted: (credential) async {
+            await FirebaseAuth.instance.signInWithCredential(credential);
+          },
+          verificationFailed: (error) {
+            if (mounted) {
+              _setError(error.message ?? 'Phone verification failed.');
+            }
+          },
+          codeSent: (id, _) {
+            if (mounted) {
+              setState(() {
+                verificationId = id;
+                otpSent = true;
+                status = 'OTP sent to $phoneNumber.';
+                statusIsError = false;
+              });
+            }
+          },
+          codeAutoRetrievalTimeout: (id) {
+            verificationId = id;
+          },
+        );
+      }
+    } on FirebaseAuthException catch (error) {
+      _setError(error.message ?? 'Could not send OTP.');
+    } catch (_) {
+      _setError('Could not send OTP. Try again.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final code = otp.text.trim();
+    if (code.length < 4) {
+      _setError('Enter the OTP received on your phone.');
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      status = null;
+      statusIsError = false;
+    });
+
+    try {
+      if (kIsWeb) {
+        final result = confirmationResult;
+        if (result == null) {
+          _setError('Please request OTP again.');
+          return;
+        }
+        await result.confirm(code);
+      } else {
+        final id = verificationId;
+        if (id == null) {
+          _setError('Please request OTP again.');
+          return;
+        }
+        final credential = PhoneAuthProvider.credential(
+          verificationId: id,
+          smsCode: code,
+        );
+        await FirebaseAuth.instance.signInWithCredential(credential);
+      }
+    } on FirebaseAuthException catch (error) {
+      _setError(error.message ?? 'OTP verification failed.');
+    } catch (_) {
+      _setError('OTP verification could not be completed.');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  void _setError(String message) {
+    if (!mounted) return;
+    setState(() {
+      status = message;
+      statusIsError = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(child: _SacredBackground()),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 540),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+                    decoration:
+                        _cardDecoration(color: AppColors.offWhite).copyWith(
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.deepCrimson.withValues(alpha: 0.11),
+                          blurRadius: 30,
+                          offset: const Offset(0, 18),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 116,
+                            height: 116,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.borderStrong),
+                            ),
+                            child: Image.asset('assets/images/app_icon.png',
+                                fit: BoxFit.contain),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Sign in to Guruvandan',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.lora(
+                            color: AppColors.ink,
+                            fontSize: 31,
+                            height: 1.08,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Use Google or phone number to begin your spiritual routine.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        const SizedBox(height: 24),
+                        FilledButton.icon(
+                          onPressed: busy ? null : _signInWithGoogle,
+                          icon:
+                              const Icon(Icons.g_mobiledata_rounded, size: 31),
+                          label: const Text('Continue with Google'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(58),
+                            backgroundColor: AppColors.maroon,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                'or phone',
+                                style: TextStyle(
+                                  color: AppColors.taupe,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: phone,
+                          enabled: !busy && !otpSent,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          decoration: _inputDecoration('Phone number').copyWith(
+                            hintText: '+91 98765 43210',
+                            prefixIcon: const Icon(Icons.phone_rounded),
+                          ),
+                        ),
+                        if (otpSent) ...[
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: otp,
+                            enabled: !busy,
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _verifyOtp(),
+                            decoration: _inputDecoration('OTP code').copyWith(
+                              prefixIcon: const Icon(Icons.sms_rounded),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed:
+                              busy ? null : (otpSent ? _verifyOtp : _sendOtp),
+                          icon: Icon(otpSent
+                              ? Icons.verified_user_rounded
+                              : Icons.sms_rounded),
+                          label: Text(otpSent ? 'Verify OTP' : 'Send OTP'),
+                        ),
+                        if (otpSent) ...[
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: busy
+                                ? null
+                                : () {
+                                    setState(() {
+                                      otp.clear();
+                                      confirmationResult = null;
+                                      verificationId = null;
+                                      otpSent = false;
+                                      status = null;
+                                    });
+                                  },
+                            child: const Text('Use another phone number'),
+                          ),
+                        ],
+                        if (status != null) ...[
+                          const SizedBox(height: 14),
+                          _StatusText(
+                            status!,
+                            isError: statusIsError,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DevoteeShell extends StatefulWidget {
+  const DevoteeShell({required this.firebaseReady, this.user, super.key});
+
+  final bool firebaseReady;
+  final User? user;
 
   @override
   State<DevoteeShell> createState() => _DevoteeShellState();
@@ -726,10 +1085,18 @@ class _DevoteeShellState extends State<DevoteeShell> {
     });
   }
 
+  String get _nameStorageKey =>
+      widget.user == null ? nameKey : '$nameKey:${widget.user!.uid}';
+
+  String get _routineStorageKey =>
+      widget.user == null ? routineKey : '$routineKey:${widget.user!.uid}';
+
   Future<void> _loadLocalState() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedName = prefs.getString(nameKey);
-    final savedRecords = prefs.getString(routineKey);
+    final savedName = prefs.getString(_nameStorageKey) ??
+        (widget.user == null ? null : prefs.getString(nameKey));
+    final savedRecords = prefs.getString(_routineStorageKey) ??
+        (widget.user == null ? null : prefs.getString(routineKey));
 
     if (savedName != null && savedName.trim().isNotEmpty) {
       devoteeName = savedName.trim();
@@ -764,7 +1131,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   Future<void> _saveFullName(String name) async {
     final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(nameKey, clean);
+    await prefs.setString(_nameStorageKey, clean);
     if (mounted) {
       setState(() {
         devoteeName = clean;
@@ -775,7 +1142,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   Future<void> _saveRecords() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(routineKey, jsonEncode(records));
+    await prefs.setString(_routineStorageKey, jsonEncode(records));
   }
 
   String get todayKey => DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -853,6 +1220,13 @@ class _DevoteeShellState extends State<DevoteeShell> {
     });
     meditationTimer?.cancel();
     await _saveRecords();
+  }
+
+  Future<void> _signOut() async {
+    meditationTimer?.cancel();
+    await satsangPlayer.stop();
+    await chantPlayer.stop();
+    await FirebaseAuth.instance.signOut();
   }
 
   Future<void> _playSatsang(SatsangTrack track) async {
@@ -1023,6 +1397,8 @@ class _DevoteeShellState extends State<DevoteeShell> {
       PracticeTab.wisdom: _WisdomScreen(quotesStream: content.quotes()),
       PracticeTab.more: _MoreScreen(
         firebaseReady: widget.firebaseReady,
+        user: widget.user,
+        onSignOut: _signOut,
         onOpenAdmin: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => AdminConsole(
@@ -2171,10 +2547,14 @@ class _WisdomQuoteCard extends StatelessWidget {
 class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
     required this.firebaseReady,
+    required this.user,
+    required this.onSignOut,
     required this.onOpenAdmin,
   });
 
   final bool firebaseReady;
+  final User? user;
+  final VoidCallback onSignOut;
   final VoidCallback onOpenAdmin;
 
   @override
@@ -2219,6 +2599,28 @@ class _MoreScreen extends StatelessWidget {
             ],
           ),
         ),
+        if (user != null)
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: _cardDecoration(color: AppColors.offWhite),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Account', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text(
+                  _userLabel(user!),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: onSignOut,
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Sign out'),
+                ),
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.all(22),
           decoration: _cardDecoration(color: const Color(0xFFFFF8EF)),
@@ -2916,9 +3318,10 @@ class _AdminCard extends StatelessWidget {
 }
 
 class _StatusText extends StatelessWidget {
-  const _StatusText(this.text);
+  const _StatusText(this.text, {this.isError = false});
 
   final String text;
+  final bool isError;
 
   @override
   Widget build(BuildContext context) {
@@ -2926,8 +3329,8 @@ class _StatusText extends StatelessWidget {
       padding: const EdgeInsets.only(top: 14),
       child: Text(
         text,
-        style: const TextStyle(
-          color: AppColors.sage,
+        style: TextStyle(
+          color: isError ? AppColors.crimson : AppColors.sage,
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -3028,6 +3431,24 @@ String _formatSeconds(int total) {
   final minutes = (safe ~/ 60).toString().padLeft(2, '0');
   final seconds = (safe % 60).toString().padLeft(2, '0');
   return '$minutes:$seconds';
+}
+
+String? _normalizedPhone(String value) {
+  var clean = value.trim().replaceAll(RegExp(r'[\s()\-]'), '');
+  if (clean.isEmpty) return null;
+  if (!clean.startsWith('+') && RegExp(r'^\d{10}$').hasMatch(clean)) {
+    clean = '+91$clean';
+  }
+  if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(clean)) return null;
+  return clean;
+}
+
+String _userLabel(User user) {
+  if ((user.email ?? '').trim().isNotEmpty) return user.email!.trim();
+  if ((user.phoneNumber ?? '').trim().isNotEmpty) {
+    return user.phoneNumber!.trim();
+  }
+  return 'Signed in';
 }
 
 String _audioContentType(String fileName) {
