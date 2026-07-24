@@ -33,8 +33,9 @@ void main() {
     expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Bhatnagar'), findsNothing);
     expect(find.text('Today\'s Routine'), findsOneWidget);
-    expect(find.text('ABOUT GURU MAHARAJ'), findsOneWidget);
-    expect(find.text('ABOUT GURU VANDAN'), findsOneWidget);
+    expect(
+        find.text('ABOUT GURU MAHARAJ', skipOffstage: false), findsOneWidget);
+    expect(find.text('ABOUT GURU VANDAN', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('Name onboarding saves split profile', (tester) async {
@@ -56,7 +57,8 @@ void main() {
     expect(find.textContaining('Kumar'), findsNothing);
     expect(find.textContaining('Bhatnagar'), findsNothing);
     expect(find.text('Today\'s Routine'), findsOneWidget);
-    expect(find.text('ABOUT GURU MAHARAJ'), findsOneWidget);
-    expect(find.text('ABOUT GURU VANDAN'), findsOneWidget);
+    expect(
+        find.text('ABOUT GURU MAHARAJ', skipOffstage: false), findsOneWidget);
+    expect(find.text('ABOUT GURU VANDAN', skipOffstage: false), findsOneWidget);
   });
 }
