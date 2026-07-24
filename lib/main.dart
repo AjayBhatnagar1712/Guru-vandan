@@ -4011,7 +4011,6 @@ class _AboutHomeSection extends StatelessWidget {
           body: guruMaharajText,
           accentColor: AppColors.maroon,
           icon: Icons.auto_awesome_rounded,
-          initiallyExpanded: true,
         ),
         SizedBox(height: 14),
         _AboutAccordionCard(
@@ -4033,7 +4032,6 @@ class _AboutAccordionCard extends StatelessWidget {
     required this.body,
     required this.accentColor,
     required this.icon,
-    this.initiallyExpanded = false,
   });
 
   final String title;
@@ -4041,7 +4039,6 @@ class _AboutAccordionCard extends StatelessWidget {
   final String body;
   final Color accentColor;
   final IconData icon;
-  final bool initiallyExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -4074,7 +4071,6 @@ class _AboutAccordionCard extends StatelessWidget {
               highlightColor: accentColor.withValues(alpha: 0.05),
             ),
             child: ExpansionTile(
-              initiallyExpanded: initiallyExpanded,
               maintainState: true,
               tilePadding: const EdgeInsets.fromLTRB(22, 10, 16, 10),
               childrenPadding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
