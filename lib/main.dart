@@ -718,6 +718,12 @@ class _SignInScreenState extends State<_SignInScreen> {
   bool statusIsError = false;
 
   @override
+  void initState() {
+    super.initState();
+    _completeGoogleRedirect();
+  }
+
+  @override
   void dispose() {
     phone.dispose();
     otp.dispose();
@@ -736,16 +742,34 @@ class _SignInScreenState extends State<_SignInScreen> {
         ..addScope('email')
         ..addScope('profile');
       if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(provider);
+        await FirebaseAuth.instance.signInWithRedirect(provider);
       } else {
         await FirebaseAuth.instance.signInWithProvider(provider);
       }
     } on FirebaseAuthException catch (error) {
-      _setError(error.message ?? 'Google sign-in failed.');
+      _setError(_friendlyAuthMessage(error, 'Google sign-in failed.'));
     } catch (_) {
       _setError('Google sign-in could not be completed.');
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _completeGoogleRedirect() async {
+    if (!kIsWeb) return;
+
+    try {
+      final result = await FirebaseAuth.instance.getRedirectResult();
+      if (result.user != null && mounted) {
+        setState(() {
+          status = 'Signed in successfully.';
+          statusIsError = false;
+        });
+      }
+    } on FirebaseAuthException catch (error) {
+      _setError(_friendlyAuthMessage(error, 'Google sign-in failed.'));
+    } catch (_) {
+      _setError('Google sign-in could not be completed.');
     }
   }
 
@@ -800,7 +824,7 @@ class _SignInScreenState extends State<_SignInScreen> {
         );
       }
     } on FirebaseAuthException catch (error) {
-      _setError(error.message ?? 'Could not send OTP.');
+      _setError(_friendlyAuthMessage(error, 'Could not send OTP.'));
     } catch (_) {
       _setError('Could not send OTP. Try again.');
     } finally {
@@ -842,7 +866,7 @@ class _SignInScreenState extends State<_SignInScreen> {
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
     } on FirebaseAuthException catch (error) {
-      _setError(error.message ?? 'OTP verification failed.');
+      _setError(_friendlyAuthMessage(error, 'OTP verification failed.'));
     } catch (_) {
       _setError('OTP verification could not be completed.');
     } finally {
@@ -3449,6 +3473,31 @@ String _userLabel(User user) {
     return user.phoneNumber!.trim();
   }
   return 'Signed in';
+}
+
+String _friendlyAuthMessage(FirebaseAuthException error, String fallback) {
+  final detail = error.message?.trim();
+  final suffix = detail == null || detail.isEmpty ? '' : ' ($detail)';
+
+  switch (error.code) {
+    case 'operation-not-allowed':
+      return 'This sign-in method is not enabled in Firebase. Enable Google and Phone under Authentication -> Sign-in method.$suffix';
+    case 'unauthorized-domain':
+      return 'This website is not authorized in Firebase. Add ajaybhatnagar1712.github.io under Authentication -> Settings -> Authorized domains.$suffix';
+    case 'popup-closed-by-user':
+    case 'cancelled-popup-request':
+      return 'Google sign-in was closed before completion. Please try again.$suffix';
+    case 'network-request-failed':
+      return 'Network problem during sign-in. Check internet and try again.$suffix';
+    case 'invalid-phone-number':
+      return 'The phone number format is not valid. Use country code, for example +91 98765 43210.$suffix';
+    case 'invalid-verification-code':
+      return 'The OTP is incorrect. Please check the code and try again.$suffix';
+    case 'too-many-requests':
+      return 'Too many attempts. Please wait a while and try again.$suffix';
+    default:
+      return '$fallback [${error.code}]$suffix';
+  }
 }
 
 String _audioContentType(String fileName) {

@@ -70,6 +70,8 @@ Supported sign-in methods:
 - Google sign-in
 - Phone number OTP sign-in
 
+On web, Google sign-in uses Firebase redirect login to avoid browser popup issues.
+
 Enable these in Firebase Console:
 
 ```text
@@ -81,6 +83,12 @@ For the live web app, also add this under Firebase authorized domains:
 ```text
 ajaybhatnagar1712.github.io
 ```
+
+If Google sign-in opens briefly and returns without signing in, check these first:
+
+- Google provider is enabled in Firebase Authentication
+- `ajaybhatnagar1712.github.io` is listed in authorized domains
+- The Firebase web app id in `lib/main.dart` matches the Firebase project
 
 ## Admin Console
 
