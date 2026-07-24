@@ -163,7 +163,7 @@ class AppColors {
 
 enum PracticeTab { home, satsang, meditate, wisdom, more }
 
-enum SatsangSession { morning, evening }
+enum SatsangSession { morning, evening, aarti }
 
 enum RoutineTask { morningSatsang, eveningSatsang, meditation }
 
@@ -272,9 +272,7 @@ class SatsangTrack {
   factory SatsangTrack.fromEntry(String id, Map<dynamic, dynamic> value) {
     return SatsangTrack(
       id: id,
-      session: value['session'] == 'evening'
-          ? SatsangSession.evening
-          : SatsangSession.morning,
+      session: _satsangSessionFromValue(value['session']),
       title: (value['title'] ?? 'Satsang').toString(),
       description: (value['description'] ?? 'Sacred audio for daily practice.')
           .toString(),
@@ -354,6 +352,14 @@ const fallbackSatsangs = [
     description: 'Close the day with the full evening satsang.',
     durationLabel: '24:11',
     assetPath: 'audio/shaam_satsang_full.mp3',
+  ),
+  SatsangTrack(
+    id: 'local-aarti',
+    session: SatsangSession.aarti,
+    title: 'Shaam Aarti',
+    description: 'Evening aarti for devotion and gratitude.',
+    durationLabel: '08:46',
+    assetPath: 'audio/shaam_aarti.mp3',
   ),
 ];
 
@@ -1393,9 +1399,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   }
 
   Future<void> _playSatsang(SatsangTrack track) async {
-    final task = track.session == SatsangSession.morning
-        ? RoutineTask.morningSatsang
-        : RoutineTask.eveningSatsang;
+    final task = _routineTaskForSatsangSession(track.session);
 
     try {
       if (activeTrackId == track.id) {
@@ -2287,21 +2291,25 @@ class _SatsangScreen extends StatelessWidget {
         final tracks = (snapshot.data ?? fallbackSatsangs)
             .where((track) => track.session == selectedSession)
             .toList();
+        final visibleTracks = tracks.isEmpty
+            ? fallbackSatsangs
+                .where((track) => track.session == selectedSession)
+                .toList()
+            : tracks;
 
         return _PageScaffold(
           children: [
             const _ScreenTitle(
               icon: Icons.headphones_rounded,
               title: 'Satsang',
-              subtitle: 'Morning and evening audio for steady daily devotion.',
+              subtitle:
+                  'Morning, evening, and aarti audio for steady daily devotion.',
             ),
             _SessionSwitch(
                 selected: selectedSession, onChanged: onSessionChanged),
-            ...tracks.map((track) {
-              final task = track.session == SatsangSession.morning
-                  ? RoutineTask.morningSatsang
-                  : RoutineTask.eveningSatsang;
-              final done = today[task.name] == true;
+            ...visibleTracks.map((track) {
+              final task = _routineTaskForSatsangSession(track.session);
+              final done = task != null && today[task.name] == true;
               final active = activeTrackId == track.id;
               final progress = active && audioDuration.inMilliseconds > 0
                   ? audioPosition.inMilliseconds / audioDuration.inMilliseconds
@@ -2318,7 +2326,7 @@ class _SatsangScreen extends StatelessWidget {
                     ? _formatDuration(audioDuration)
                     : track.durationLabel,
                 onPlay: () => onPlay(track),
-                onMark: () => onMark(task),
+                onMark: task == null ? null : () => onMark(task),
               );
             }),
           ],
@@ -2362,15 +2370,13 @@ class _SessionSwitch extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      session == SatsangSession.morning
-                          ? Icons.wb_sunny_rounded
-                          : Icons.nights_stay_rounded,
+                      _satsangSessionIcon(session),
                       size: 22,
                       color: active ? AppColors.cream : AppColors.maroon,
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      session == SatsangSession.morning ? 'Morning' : 'Evening',
+                      _satsangSessionLabel(session),
                       style: TextStyle(
                         color: active ? AppColors.cream : AppColors.maroon,
                         fontSize: 17,
@@ -2398,7 +2404,7 @@ class _AudioCard extends StatelessWidget {
     required this.position,
     required this.duration,
     required this.onPlay,
-    required this.onMark,
+    this.onMark,
   });
 
   final SatsangTrack track;
@@ -2409,7 +2415,7 @@ class _AudioCard extends StatelessWidget {
   final String position;
   final String duration;
   final VoidCallback onPlay;
-  final VoidCallback onMark;
+  final VoidCallback? onMark;
 
   @override
   Widget build(BuildContext context) {
@@ -2433,9 +2439,7 @@ class _AudioCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  track.session == SatsangSession.morning
-                      ? Icons.wb_sunny_rounded
-                      : Icons.nights_stay_rounded,
+                  _satsangSessionIcon(track.session),
                   color: active ? AppColors.cream : AppColors.maroon,
                   size: 29,
                 ),
@@ -2446,9 +2450,7 @@ class _AudioCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      track.session == SatsangSession.morning
-                          ? 'Morning satsang'
-                          : 'Evening satsang',
+                      _satsangSessionEyebrow(track.session),
                       style: const TextStyle(
                         color: AppColors.gold,
                         fontSize: 15,
@@ -2503,19 +2505,21 @@ class _AudioCard extends StatelessWidget {
                       FilledButton.styleFrom(backgroundColor: AppColors.maroon),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onMark,
-                  icon: Icon(done
-                      ? Icons.verified_rounded
-                      : Icons.check_circle_outline_rounded),
-                  label: Text(done ? 'Completed' : 'Complete'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: done ? AppColors.sage : AppColors.maroon,
+              if (onMark != null) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onMark,
+                    icon: Icon(done
+                        ? Icons.verified_rounded
+                        : Icons.check_circle_outline_rounded),
+                    label: Text(done ? 'Completed' : 'Complete'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: done ? AppColors.sage : AppColors.maroon,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -3416,6 +3420,10 @@ class _AdminConsoleState extends State<AdminConsole> {
               value: SatsangSession.evening,
               label: Text('Evening'),
               icon: Icon(Icons.nights_stay_rounded)),
+          ButtonSegment(
+              value: SatsangSession.aarti,
+              label: Text('Aarti'),
+              icon: Icon(Icons.local_fire_department_rounded)),
         ],
         selected: {session},
         onSelectionChanged: (value) => setState(() => session = value.first),
@@ -3979,6 +3987,62 @@ String _formatDurationLabel(Duration duration) {
   if (hours == 0) return '$minutes min';
   if (minutes == 0) return hours == 1 ? '1 hr' : '$hours hr';
   return '$hours hr $minutes min';
+}
+
+SatsangSession _satsangSessionFromValue(Object? value) {
+  switch (value?.toString()) {
+    case 'evening':
+      return SatsangSession.evening;
+    case 'aarti':
+      return SatsangSession.aarti;
+    case 'morning':
+    default:
+      return SatsangSession.morning;
+  }
+}
+
+RoutineTask? _routineTaskForSatsangSession(SatsangSession session) {
+  switch (session) {
+    case SatsangSession.morning:
+      return RoutineTask.morningSatsang;
+    case SatsangSession.evening:
+      return RoutineTask.eveningSatsang;
+    case SatsangSession.aarti:
+      return null;
+  }
+}
+
+IconData _satsangSessionIcon(SatsangSession session) {
+  switch (session) {
+    case SatsangSession.morning:
+      return Icons.wb_sunny_rounded;
+    case SatsangSession.evening:
+      return Icons.nights_stay_rounded;
+    case SatsangSession.aarti:
+      return Icons.local_fire_department_rounded;
+  }
+}
+
+String _satsangSessionLabel(SatsangSession session) {
+  switch (session) {
+    case SatsangSession.morning:
+      return 'Morning';
+    case SatsangSession.evening:
+      return 'Evening';
+    case SatsangSession.aarti:
+      return 'Aarti';
+  }
+}
+
+String _satsangSessionEyebrow(SatsangSession session) {
+  switch (session) {
+    case SatsangSession.morning:
+      return 'Morning satsang';
+    case SatsangSession.evening:
+      return 'Evening satsang';
+    case SatsangSession.aarti:
+      return 'Aarti';
+  }
 }
 
 String _cleanNamePart(String value) {
