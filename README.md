@@ -70,7 +70,8 @@ Supported sign-in methods:
 - Google sign-in
 - Phone number OTP sign-in
 
-On web, Google sign-in uses Firebase redirect login to avoid browser popup issues.
+On web, Google sign-in tries Firebase popup login first and automatically falls
+back to redirect login if the browser closes or blocks the popup.
 
 Enable these in Firebase Console:
 

@@ -39,6 +39,9 @@ Future<void> main() async {
 
   try {
     await Firebase.initializeApp(options: firebaseOptions);
+    if (kIsWeb) {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    }
     firebaseReady = true;
   } catch (_) {
     firebaseReady = false;
@@ -658,50 +661,102 @@ class _OpeningScenePainter extends CustomPainter {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({required this.firebaseReady, super.key});
 
   final bool firebaseReady;
 
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Future<String?> startup = _prepareAuthStartup();
+
+  Future<String?> _prepareAuthStartup() async {
+    if (!widget.firebaseReady || !kIsWeb) return null;
+
+    try {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      await FirebaseAuth.instance.getRedirectResult();
+    } on FirebaseAuthException catch (error) {
+      return _friendlyAuthMessage(error, 'Google sign-in failed.');
+    } catch (_) {
+      return 'Google sign-in could not be completed. Please try again.';
+    }
+
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (!firebaseReady) {
+    if (!widget.firebaseReady) {
       return const DevoteeShell(firebaseReady: false);
     }
 
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      initialData: FirebaseAuth.instance.currentUser,
+    return FutureBuilder<String?>(
+      future: startup,
       builder: (context, snapshot) {
-        final user = snapshot.data;
         if (snapshot.connectionState == ConnectionState.waiting &&
-            user == null) {
-          return const Scaffold(
-            body: Stack(
-              children: [
-                Positioned.fill(child: _SacredBackground()),
-                SafeArea(child: _ProfileLoadingScreen()),
-              ],
-            ),
-          );
+            FirebaseAuth.instance.currentUser == null) {
+          return const _AuthLoadingScaffold();
         }
 
-        if (user == null) {
-          return const _SignInScreen();
-        }
+        final startupError = snapshot.data;
 
-        return DevoteeShell(
-          key: ValueKey('devotee-shell-${user.uid}'),
-          firebaseReady: firebaseReady,
-          user: user,
+        return StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.idTokenChanges(),
+          initialData: FirebaseAuth.instance.currentUser,
+          builder: (context, authSnapshot) {
+            final user = authSnapshot.data;
+            if (authSnapshot.connectionState == ConnectionState.waiting &&
+                user == null) {
+              return const _AuthLoadingScaffold();
+            }
+
+            if (user == null) {
+              return _SignInScreen(
+                initialStatus: startupError,
+                initialStatusIsError: startupError != null,
+              );
+            }
+
+            return DevoteeShell(
+              key: ValueKey('devotee-shell-${user.uid}'),
+              firebaseReady: widget.firebaseReady,
+              user: user,
+            );
+          },
         );
       },
     );
   }
 }
 
+class _AuthLoadingScaffold extends StatelessWidget {
+  const _AuthLoadingScaffold();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(child: _SacredBackground()),
+          SafeArea(child: _ProfileLoadingScreen()),
+        ],
+      ),
+    );
+  }
+}
+
 class _SignInScreen extends StatefulWidget {
-  const _SignInScreen();
+  const _SignInScreen({
+    this.initialStatus,
+    this.initialStatusIsError = false,
+  });
+
+  final String? initialStatus;
+  final bool initialStatusIsError;
 
   @override
   State<_SignInScreen> createState() => _SignInScreenState();
@@ -720,7 +775,8 @@ class _SignInScreenState extends State<_SignInScreen> {
   @override
   void initState() {
     super.initState();
-    _completeGoogleRedirect();
+    status = widget.initialStatus;
+    statusIsError = widget.initialStatusIsError;
   }
 
   @override
@@ -742,7 +798,12 @@ class _SignInScreenState extends State<_SignInScreen> {
         ..addScope('email')
         ..addScope('profile');
       if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithRedirect(provider);
+        try {
+          await FirebaseAuth.instance.signInWithPopup(provider);
+        } on FirebaseAuthException catch (error) {
+          if (!_shouldFallbackToRedirect(error.code)) rethrow;
+          await FirebaseAuth.instance.signInWithRedirect(provider);
+        }
       } else {
         await FirebaseAuth.instance.signInWithProvider(provider);
       }
@@ -752,24 +813,6 @@ class _SignInScreenState extends State<_SignInScreen> {
       _setError('Google sign-in could not be completed.');
     } finally {
       if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> _completeGoogleRedirect() async {
-    if (!kIsWeb) return;
-
-    try {
-      final result = await FirebaseAuth.instance.getRedirectResult();
-      if (result.user != null && mounted) {
-        setState(() {
-          status = 'Signed in successfully.';
-          statusIsError = false;
-        });
-      }
-    } on FirebaseAuthException catch (error) {
-      _setError(_friendlyAuthMessage(error, 'Google sign-in failed.'));
-    } catch (_) {
-      _setError('Google sign-in could not be completed.');
     }
   }
 
@@ -3498,6 +3541,14 @@ String _friendlyAuthMessage(FirebaseAuthException error, String fallback) {
     default:
       return '$fallback [${error.code}]$suffix';
   }
+}
+
+bool _shouldFallbackToRedirect(String code) {
+  return code == 'popup-blocked' ||
+      code == 'popup-closed-by-user' ||
+      code == 'cancelled-popup-request' ||
+      code == 'web-context-cancelled' ||
+      code == 'internal-error';
 }
 
 String _audioContentType(String fileName) {
