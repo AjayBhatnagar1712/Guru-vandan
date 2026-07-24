@@ -2143,6 +2143,7 @@ class _HomeScreen extends StatelessWidget {
               onTap: () => onOpenSatsang(SatsangSession.evening),
             ),
             _WisdomFeature(quote: quote),
+            const _AboutHomeSection(),
             _MilestonePanel(stats: stats),
           ],
         );
@@ -3972,6 +3973,162 @@ class _WisdomFeature extends StatelessWidget {
             style: const TextStyle(
               color: AppColors.maroon,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AboutHomeSection extends StatelessWidget {
+  const _AboutHomeSection();
+
+  static const guruMaharajText =
+      'Sadguru Maharshi Mehi Paramhans was one of the most respected saints '
+      'and spiritual masters of the Sant Mat tradition in India. Born in '
+      'Bihar, he dedicated his life to spreading the message of inner '
+      'meditation, self-realization, universal love, and peace. He emphasized '
+      'the practice of Surat Shabd Yoga and taught that true spirituality lies '
+      'beyond caste, religion, and social divisions.\n\n'
+      'Through his profound writings, discourses, and compassionate guidance, '
+      'he inspired millions of devotees to walk the path of devotion, '
+      'simplicity, morality, and spiritual awakening. His teachings continue '
+      'to guide seekers toward inner harmony and realization of the Divine '
+      'within every soul.';
+
+  static const guruVandanText =
+      'A sacred space for daily spiritual practice - satsang, meditation, '
+      'Sadguru\'s wisdom and community of devotees, all in one place. Jai Guru.';
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        _AboutAccordionCard(
+          title: 'ABOUT GURU MAHARAJ',
+          summary: 'Life, teachings, and the Sant Mat path',
+          body: guruMaharajText,
+          accentColor: AppColors.maroon,
+          icon: Icons.auto_awesome_rounded,
+          initiallyExpanded: true,
+        ),
+        SizedBox(height: 14),
+        _AboutAccordionCard(
+          title: 'ABOUT GURU VANDAN',
+          summary: 'A sacred space for daily practice',
+          body: guruVandanText,
+          accentColor: AppColors.gold,
+          icon: Icons.volunteer_activism_rounded,
+        ),
+      ],
+    );
+  }
+}
+
+class _AboutAccordionCard extends StatelessWidget {
+  const _AboutAccordionCard({
+    required this.title,
+    required this.summary,
+    required this.body,
+    required this.accentColor,
+    required this.icon,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final String summary;
+  final String body;
+  final Color accentColor;
+  final IconData icon;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: _cardDecoration(
+        color: AppColors.offWhite,
+        borderColor: AppColors.border,
+      ).copyWith(
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(width: 5, color: accentColor),
+            ),
+          ),
+          Theme(
+            data: Theme.of(context).copyWith(
+              dividerColor: Colors.transparent,
+              splashColor: accentColor.withValues(alpha: 0.08),
+              highlightColor: accentColor.withValues(alpha: 0.05),
+            ),
+            child: ExpansionTile(
+              initiallyExpanded: initiallyExpanded,
+              maintainState: true,
+              tilePadding: const EdgeInsets.fromLTRB(22, 10, 16, 10),
+              childrenPadding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              iconColor: accentColor,
+              collapsedIconColor: AppColors.taupe,
+              leading: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.22),
+                  ),
+                ),
+                child: Icon(icon, color: accentColor, size: 23),
+              ),
+              title: Text(
+                title,
+                style: GoogleFonts.inter(
+                  color: accentColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  summary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: AppColors.taupe,
+                    fontSize: 15,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+              children: [
+                Text(
+                  body,
+                  style: GoogleFonts.inter(
+                    color: AppColors.ink,
+                    fontSize: 18,
+                    height: 1.56,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
