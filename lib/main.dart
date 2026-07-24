@@ -254,6 +254,7 @@ class SatsangTrack {
     required this.description,
     required this.durationLabel,
     this.audioUrl,
+    this.assetPath,
     this.active = true,
     this.createdAt,
   });
@@ -264,6 +265,7 @@ class SatsangTrack {
   final String description;
   final String durationLabel;
   final String? audioUrl;
+  final String? assetPath;
   final bool active;
   final int? createdAt;
 
@@ -343,13 +345,15 @@ const fallbackSatsangs = [
     title: 'Morning Aarti',
     description: 'Begin the day with a graceful devotional satsang.',
     durationLabel: '05:00',
+    assetPath: 'audio/morning_satsang_sample.mp4',
   ),
   SatsangTrack(
     id: 'local-evening',
     session: SatsangSession.evening,
-    title: 'Evening Aarti',
-    description: 'Close the day with remembrance, gratitude, and peace.',
-    durationLabel: '05:00',
+    title: 'Shaam Satsang',
+    description: 'Close the day with the full evening satsang.',
+    durationLabel: '24:11',
+    assetPath: 'audio/shaam_satsang_full.mp3',
   ),
 ];
 
@@ -1411,8 +1415,11 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
       if (track.audioUrl != null && track.audioUrl!.isNotEmpty) {
         await satsangPlayer.play(UrlSource(track.audioUrl!));
+      } else if (track.assetPath != null && track.assetPath!.isNotEmpty) {
+        await satsangPlayer.play(AssetSource(track.assetPath!));
       } else {
-        await satsangPlayer.play(AssetSource('audio/satsang_sample.mp4'));
+        await satsangPlayer
+            .play(AssetSource('audio/morning_satsang_sample.mp4'));
       }
 
       setState(() {
