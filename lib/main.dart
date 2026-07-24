@@ -1208,6 +1208,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   bool meditationComplete = false;
   int meditationRunToken = 0;
   MeditationChantPhase? meditationChantPhase;
+  bool welcomeDialogShown = false;
   Timer? meditationTimer;
 
   @override
@@ -1292,6 +1293,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
     localStateLoaded = true;
     if (mounted) setState(() {});
+    _scheduleWelcomeDialog();
   }
 
   Future<void> _saveProfile(DevoteeProfile profile) async {
@@ -1303,6 +1305,42 @@ class _DevoteeShellState extends State<DevoteeShell> {
         needsProfileName = false;
       });
     }
+    _scheduleWelcomeDialog();
+  }
+
+  void _scheduleWelcomeDialog() {
+    if (welcomeDialogShown || needsProfileName || devoteeProfile == null) {
+      return;
+    }
+
+    welcomeDialogShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || needsProfileName || devoteeProfile == null) return;
+      showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        barrierLabel: 'Welcome',
+        barrierColor: AppColors.deepCrimson.withValues(alpha: 0.34),
+        transitionDuration: const Duration(milliseconds: 360),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return _GuruWelcomeDialog(name: devoteeProfile!.displayName);
+        },
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curve = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curve,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.94, end: 1).animate(curve),
+              child: child,
+            ),
+          );
+        },
+      );
+    });
   }
 
   Future<void> _saveRecords() async {
@@ -1857,6 +1895,184 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GuruWelcomeDialog extends StatelessWidget {
+  const _GuruWelcomeDialog({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: AppColors.offWhite,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.borderStrong),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.deepCrimson.withValues(alpha: 0.28),
+                      blurRadius: 38,
+                      offset: const Offset(0, 24),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppColors.maroon, AppColors.crimson],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 78,
+                            height: 78,
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: AppColors.offWhite,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: AppColors.softGold, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.deepCrimson
+                                      .withValues(alpha: 0.32),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/guru_image.jpeg',
+                                fit: BoxFit.cover,
+                                alignment: Alignment.topCenter,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Guru Vandan',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.lora(
+                              color: AppColors.offWhite,
+                              fontSize: 24,
+                              height: 1.05,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+                      child: Column(
+                        children: [
+                          Text(
+                            'जय गुरु, $name!',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: AppColors.maroon,
+                              fontSize: 23,
+                              height: 1.18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: AppColors.softGold,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Icon(Icons.format_quote_rounded,
+                                  color: AppColors.rose, size: 30),
+                              const SizedBox(width: 10),
+                              Container(
+                                width: 34,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: AppColors.softGold,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'सद्गुरु महाराज के\n'
+                            'पावन आशीर्वाद से, हम\n'
+                            'आपका इस आध्यात्मिक\n'
+                            'यात्रा में हार्दिक स्वागत\n'
+                            'करते हैं।',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.taupe,
+                              fontSize: 18,
+                              height: 1.42,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(170, 56),
+                              backgroundColor: AppColors.maroon,
+                              foregroundColor: AppColors.offWhite,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 26),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              elevation: 8,
+                              shadowColor:
+                                  AppColors.maroon.withValues(alpha: 0.24),
+                              textStyle: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                height: 1.15,
+                              ),
+                            ),
+                            child: const Text(
+                              'प्रवेश करें —\nEnter',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

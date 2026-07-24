@@ -29,7 +29,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Guruvandan'), findsWidgets);
-    expect(find.textContaining('Ajay'), findsOneWidget);
+    expect(find.text('जय गुरु, Ajay!'), findsOneWidget);
+    expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Bhatnagar'), findsNothing);
     expect(find.text('Today\'s Routine'), findsOneWidget);
   });
@@ -48,7 +49,8 @@ void main() {
     await tester.tap(find.text('Begin'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Ajay'), findsOneWidget);
+    expect(find.text('जय गुरु, Ajay!'), findsOneWidget);
+    expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Kumar'), findsNothing);
     expect(find.textContaining('Bhatnagar'), findsNothing);
     expect(find.text('Today\'s Routine'), findsOneWidget);
