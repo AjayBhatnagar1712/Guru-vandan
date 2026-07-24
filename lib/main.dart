@@ -167,7 +167,7 @@ enum SatsangSession { morning, evening }
 
 enum RoutineTask { morningSatsang, eveningSatsang, meditation }
 
-enum MeditationChantPhase { opening, closing }
+enum MeditationChantPhase { closing }
 
 class DevoteeProfile {
   const DevoteeProfile({
@@ -1196,7 +1196,6 @@ class _DevoteeShellState extends State<DevoteeShell> {
   bool customMeditationDurationSelected = false;
   bool meditationRunning = false;
   bool meditationComplete = false;
-  bool meditationOpeningPlayed = false;
   int meditationRunToken = 0;
   MeditationChantPhase? meditationChantPhase;
   Timer? meditationTimer;
@@ -1374,7 +1373,6 @@ class _DevoteeShellState extends State<DevoteeShell> {
       records.remove(todayKey);
       meditationComplete = false;
       meditationRunning = false;
-      meditationOpeningPlayed = false;
       meditationChantPhase = null;
       remainingSeconds = selectedDurationSeconds;
     });
@@ -1448,7 +1446,6 @@ class _DevoteeShellState extends State<DevoteeShell> {
       customMeditationDurationSelected = custom;
       meditationRunning = false;
       meditationComplete = false;
-      meditationOpeningPlayed = false;
       meditationChantPhase = null;
     });
   }
@@ -1486,33 +1483,10 @@ class _DevoteeShellState extends State<DevoteeShell> {
       setState(() {
         remainingSeconds = selectedDurationSeconds;
         meditationComplete = false;
-        meditationOpeningPlayed = false;
       });
     }
 
     final token = ++meditationRunToken;
-
-    if (!meditationOpeningPlayed) {
-      setState(() {
-        meditationChantPhase = MeditationChantPhase.opening;
-        meditationComplete = false;
-      });
-
-      try {
-        await _playMeditationChant();
-      } catch (_) {
-        _showMeditationAudioError(
-            'Opening chant could not be played. Timer is starting now.');
-      }
-
-      if (!mounted || token != meditationRunToken) return;
-
-      setState(() {
-        meditationChantPhase = null;
-        meditationOpeningPlayed = true;
-      });
-    }
-
     _startMeditationTimer(token);
   }
 
@@ -1556,7 +1530,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       await _playMeditationChant();
     } catch (_) {
       _showMeditationAudioError(
-          'Closing chant could not be played. Meditation is marked complete.');
+          'Completion chime could not be played. Meditation is marked complete.');
     }
 
     if (!mounted || token != meditationRunToken) return;
@@ -1568,7 +1542,6 @@ class _DevoteeShellState extends State<DevoteeShell> {
     setState(() {
       meditationChantPhase = null;
       meditationComplete = true;
-      meditationOpeningPlayed = false;
     });
   }
 
@@ -1601,7 +1574,6 @@ class _DevoteeShellState extends State<DevoteeShell> {
     setState(() {
       meditationRunning = false;
       meditationComplete = false;
-      meditationOpeningPlayed = false;
       meditationChantPhase = null;
       remainingSeconds = selectedDurationSeconds;
     });
@@ -2579,22 +2551,18 @@ class _MeditationScreen extends StatelessWidget {
         : 1 - remainingSeconds / selectedDurationSeconds;
     final chantPlaying = meditationChantPhase != null;
     final locked = meditationRunning || chantPlaying;
-    final statusLabel = meditationChantPhase == MeditationChantPhase.opening
-        ? 'Opening chant'
-        : meditationChantPhase == MeditationChantPhase.closing
-            ? 'Closing chant'
-            : meditationRunning
-                ? 'Meditating'
-                : meditationComplete
-                    ? 'Complete'
-                    : 'Ready';
-    final actionLabel = meditationChantPhase == MeditationChantPhase.opening
-        ? 'Opening chant'
-        : meditationChantPhase == MeditationChantPhase.closing
-            ? 'Closing chant'
-            : meditationRunning
-                ? 'Pause'
-                : 'Start';
+    final statusLabel = meditationChantPhase == MeditationChantPhase.closing
+        ? 'Completion chime'
+        : meditationRunning
+            ? 'Meditating'
+            : meditationComplete
+                ? 'Complete'
+                : 'Ready';
+    final actionLabel = meditationChantPhase == MeditationChantPhase.closing
+        ? 'Completion chime'
+        : meditationRunning
+            ? 'Pause'
+            : 'Start';
 
     return _PageScaffold(
       children: [
@@ -2602,7 +2570,7 @@ class _MeditationScreen extends StatelessWidget {
           icon: Icons.self_improvement_rounded,
           title: 'Meditation',
           subtitle:
-              'A chant opens and closes the session. Only the quiet middle is timed.',
+              'Set your duration. The chime plays only when the timer ends.',
         ),
         Container(
           padding: const EdgeInsets.all(22),
