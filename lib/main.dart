@@ -166,6 +166,8 @@ enum SatsangSession { morning, evening }
 
 enum RoutineTask { morningSatsang, eveningSatsang, meditation }
 
+enum MeditationChantPhase { opening, closing }
+
 class DevoteeProfile {
   const DevoteeProfile({
     required this.firstName,
@@ -1192,6 +1194,9 @@ class _DevoteeShellState extends State<DevoteeShell> {
   int remainingSeconds = 600;
   bool meditationRunning = false;
   bool meditationComplete = false;
+  bool meditationOpeningPlayed = false;
+  int meditationRunToken = 0;
+  MeditationChantPhase? meditationChantPhase;
   Timer? meditationTimer;
 
   @override
@@ -1361,10 +1366,14 @@ class _DevoteeShellState extends State<DevoteeShell> {
   }
 
   Future<void> _resetToday() async {
+    meditationRunToken++;
+    await chantPlayer.stop();
     setState(() {
       records.remove(todayKey);
       meditationComplete = false;
       meditationRunning = false;
+      meditationOpeningPlayed = false;
+      meditationChantPhase = null;
       remainingSeconds = selectedMinutes * 60;
     });
     meditationTimer?.cancel();
@@ -1372,6 +1381,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   }
 
   Future<void> _signOut() async {
+    meditationRunToken++;
     meditationTimer?.cancel();
     await satsangPlayer.stop();
     await chantPlayer.stop();
@@ -1419,51 +1429,83 @@ class _DevoteeShellState extends State<DevoteeShell> {
   }
 
   void _setMeditationMinutes(int minutes) {
+    meditationRunToken++;
     meditationTimer?.cancel();
+    unawaited(chantPlayer.stop());
     setState(() {
       selectedMinutes = minutes;
       remainingSeconds = minutes * 60;
       meditationRunning = false;
       meditationComplete = false;
+      meditationOpeningPlayed = false;
+      meditationChantPhase = null;
     });
   }
 
   void _toggleMeditation() {
+    if (meditationChantPhase != null) return;
+
     if (meditationRunning) {
       meditationTimer?.cancel();
       setState(() => meditationRunning = false);
       return;
     }
 
+    unawaited(_beginMeditationSession());
+  }
+
+  Future<void> _beginMeditationSession() async {
     if (remainingSeconds <= 0) {
       setState(() {
         remainingSeconds = selectedMinutes * 60;
         meditationComplete = false;
+        meditationOpeningPlayed = false;
       });
     }
 
+    final token = ++meditationRunToken;
+
+    if (!meditationOpeningPlayed) {
+      setState(() {
+        meditationChantPhase = MeditationChantPhase.opening;
+        meditationComplete = false;
+      });
+
+      try {
+        await _playMeditationChant();
+      } catch (_) {
+        _showMeditationAudioError(
+            'Opening chant could not be played. Timer is starting now.');
+      }
+
+      if (!mounted || token != meditationRunToken) return;
+
+      setState(() {
+        meditationChantPhase = null;
+        meditationOpeningPlayed = true;
+      });
+    }
+
+    _startMeditationTimer(token);
+  }
+
+  void _startMeditationTimer(int token) {
+    meditationTimer?.cancel();
     meditationTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (token != meditationRunToken) {
+        timer.cancel();
+        return;
+      }
+
       if (remainingSeconds <= 1) {
         timer.cancel();
-        await _markTask(RoutineTask.meditation);
-        try {
-          await chantPlayer.play(AssetSource('audio/satsang_sample.mp4'));
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text(
-                      'Meditation completed. Chant audio could not be played.')),
-            );
-          }
-        }
         if (mounted) {
           setState(() {
             remainingSeconds = 0;
             meditationRunning = false;
-            meditationComplete = true;
           });
         }
+        await _finishMeditationSession(token);
         return;
       }
 
@@ -1473,6 +1515,75 @@ class _DevoteeShellState extends State<DevoteeShell> {
     });
 
     setState(() => meditationRunning = true);
+  }
+
+  Future<void> _finishMeditationSession(int token) async {
+    if (!mounted || token != meditationRunToken) return;
+
+    setState(() {
+      meditationChantPhase = MeditationChantPhase.closing;
+      meditationRunning = false;
+    });
+
+    try {
+      await _playMeditationChant();
+    } catch (_) {
+      _showMeditationAudioError(
+          'Closing chant could not be played. Meditation is marked complete.');
+    }
+
+    if (!mounted || token != meditationRunToken) return;
+
+    await _markTask(RoutineTask.meditation);
+
+    if (!mounted || token != meditationRunToken) return;
+
+    setState(() {
+      meditationChantPhase = null;
+      meditationComplete = true;
+      meditationOpeningPlayed = false;
+    });
+  }
+
+  Future<void> _playMeditationChant() async {
+    await chantPlayer.stop();
+
+    final completed = Completer<void>();
+    void finish() {
+      if (!completed.isCompleted) completed.complete();
+    }
+
+    final completeSub = chantPlayer.onPlayerComplete.listen((_) => finish());
+    final stateSub = chantPlayer.onPlayerStateChanged.listen((state) {
+      if (state == PlayerState.stopped) finish();
+    });
+
+    try {
+      await chantPlayer.play(AssetSource('audio/meditation_chant.mp3'));
+      await completed.future.timeout(const Duration(minutes: 5));
+    } finally {
+      await completeSub.cancel();
+      await stateSub.cancel();
+    }
+  }
+
+  void _resetMeditation() {
+    meditationRunToken++;
+    meditationTimer?.cancel();
+    unawaited(chantPlayer.stop());
+    setState(() {
+      meditationRunning = false;
+      meditationComplete = false;
+      meditationOpeningPlayed = false;
+      meditationChantPhase = null;
+      remainingSeconds = selectedMinutes * 60;
+    });
+  }
+
+  void _showMeditationAudioError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -1531,17 +1642,11 @@ class _DevoteeShellState extends State<DevoteeShell> {
         remainingSeconds: remainingSeconds,
         meditationRunning: meditationRunning,
         meditationComplete: meditationComplete,
+        meditationChantPhase: meditationChantPhase,
         todayDone: today[RoutineTask.meditation.name] == true,
         onMinutesChanged: _setMeditationMinutes,
         onToggle: _toggleMeditation,
-        onReset: () {
-          meditationTimer?.cancel();
-          setState(() {
-            meditationRunning = false;
-            meditationComplete = false;
-            remainingSeconds = selectedMinutes * 60;
-          });
-        },
+        onReset: _resetMeditation,
       ),
       PracticeTab.wisdom: _WisdomScreen(quotesStream: content.quotes()),
       PracticeTab.more: _MoreScreen(
@@ -2417,6 +2522,7 @@ class _MeditationScreen extends StatelessWidget {
     required this.remainingSeconds,
     required this.meditationRunning,
     required this.meditationComplete,
+    required this.meditationChantPhase,
     required this.todayDone,
     required this.onMinutesChanged,
     required this.onToggle,
@@ -2427,6 +2533,7 @@ class _MeditationScreen extends StatelessWidget {
   final int remainingSeconds;
   final bool meditationRunning;
   final bool meditationComplete;
+  final MeditationChantPhase? meditationChantPhase;
   final bool todayDone;
   final ValueChanged<int> onMinutesChanged;
   final VoidCallback onToggle;
@@ -2437,13 +2544,31 @@ class _MeditationScreen extends StatelessWidget {
     final progress = selectedMinutes == 0
         ? 0.0
         : 1 - remainingSeconds / (selectedMinutes * 60);
+    final chantPlaying = meditationChantPhase != null;
+    final statusLabel = meditationChantPhase == MeditationChantPhase.opening
+        ? 'Opening chant'
+        : meditationChantPhase == MeditationChantPhase.closing
+            ? 'Closing chant'
+            : meditationRunning
+                ? 'Meditating'
+                : meditationComplete
+                    ? 'Complete'
+                    : 'Ready';
+    final actionLabel = meditationChantPhase == MeditationChantPhase.opening
+        ? 'Opening chant'
+        : meditationChantPhase == MeditationChantPhase.closing
+            ? 'Closing chant'
+            : meditationRunning
+                ? 'Pause'
+                : 'Start';
 
     return _PageScaffold(
       children: [
         const _ScreenTitle(
           icon: Icons.self_improvement_rounded,
           title: 'Meditation',
-          subtitle: 'Settle into stillness. The session closes with a chant.',
+          subtitle:
+              'A chant opens and closes the session. Only the quiet middle is timed.',
         ),
         Container(
           padding: const EdgeInsets.all(22),
@@ -2459,8 +2584,8 @@ class _MeditationScreen extends StatelessWidget {
                   children: [
                     CustomPaint(
                       size: const Size.square(268),
-                      painter:
-                          _MeditationHaloPainter(active: meditationRunning),
+                      painter: _MeditationHaloPainter(
+                          active: meditationRunning || chantPlaying),
                     ),
                     SizedBox.expand(
                       child: CircularProgressIndicator(
@@ -2503,11 +2628,7 @@ class _MeditationScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            meditationRunning
-                                ? 'Meditating'
-                                : meditationComplete
-                                    ? 'Complete'
-                                    : 'Ready',
+                            statusLabel,
                             style: const TextStyle(
                               color: AppColors.taupe,
                               fontWeight: FontWeight.w900,
@@ -2529,7 +2650,9 @@ class _MeditationScreen extends StatelessWidget {
                   return ChoiceChip(
                     label: Text('$minutes min'),
                     selected: active,
-                    onSelected: (_) => onMinutesChanged(minutes),
+                    onSelected: meditationRunning || chantPlaying
+                        ? null
+                        : (_) => onMinutesChanged(minutes),
                     selectedColor: AppColors.maroon,
                     backgroundColor: AppColors.rose,
                     labelStyle: TextStyle(
@@ -2548,11 +2671,13 @@ class _MeditationScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: onToggle,
-                      icon: Icon(meditationRunning
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded),
-                      label: Text(meditationRunning ? 'Pause' : 'Start'),
+                      onPressed: chantPlaying ? null : onToggle,
+                      icon: Icon(chantPlaying
+                          ? Icons.music_note_rounded
+                          : meditationRunning
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded),
+                      label: Text(actionLabel),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(58),
                         backgroundColor: meditationRunning

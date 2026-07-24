@@ -31,4 +31,5 @@ flutter:
     - assets/images/logo.jpg
     - assets/images/app_icon.png
     - assets/images/guru_image.jpeg
+    - assets/audio/meditation_chant.mp3
     - assets/audio/satsang_sample.mp4
