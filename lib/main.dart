@@ -342,10 +342,10 @@ const fallbackSatsangs = [
   SatsangTrack(
     id: 'local-morning',
     session: SatsangSession.morning,
-    title: 'Morning Aarti',
-    description: 'Begin the day with a graceful devotional satsang.',
-    durationLabel: '05:00',
-    assetPath: 'audio/morning_satsang_sample.mp4',
+    title: 'Morning Satsang',
+    description: 'Begin the day with Astuti from Rishikesh.',
+    durationLabel: '57:10',
+    assetPath: 'audio/morning_satsang_astuti_rishikesh.mp3',
   ),
   SatsangTrack(
     id: 'local-evening',
@@ -1419,7 +1419,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
         await satsangPlayer.play(AssetSource(track.assetPath!));
       } else {
         await satsangPlayer
-            .play(AssetSource('audio/morning_satsang_sample.mp4'));
+            .play(AssetSource('audio/morning_satsang_astuti_rishikesh.mp3'));
       }
 
       setState(() {

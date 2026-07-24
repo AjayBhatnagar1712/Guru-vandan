@@ -22,7 +22,7 @@ Guruvandan is a Flutter app for a spiritual school where devotees can follow a s
 
 ## Bundled Audio
 
-- Morning fallback satsang: `assets/audio/morning_satsang_sample.mp4`
+- Morning fallback satsang: `assets/audio/morning_satsang_astuti_rishikesh.mp3`
 - Shaam satsang fallback: `assets/audio/shaam_satsang_full.mp3`
 - Meditation completion chime: `assets/audio/meditation_chant.mp3`
 
