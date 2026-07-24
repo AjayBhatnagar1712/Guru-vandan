@@ -5,7 +5,8 @@ Guruvandan is a Flutter app for a spiritual school where devotees can follow a s
 ## Features
 
 - Morning and evening satsang audio
-- Meditation timer with chant sound on completion
+- Meditation timer with preset durations, custom hour/minute picker, and chant
+  audio before and after the timed session
 - Daily Sadguru Maharaj quotes
 - Local streak tracking for routine consistency
 - Firebase-ready admin console for uploading satsang audio and adding quotes

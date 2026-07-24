@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1190,8 +1191,9 @@ class _DevoteeShellState extends State<DevoteeShell> {
   Duration audioPosition = Duration.zero;
   Duration audioDuration = Duration.zero;
 
-  int selectedMinutes = 10;
-  int remainingSeconds = 600;
+  int selectedDurationSeconds = 10 * 60;
+  int remainingSeconds = 10 * 60;
+  bool customMeditationDurationSelected = false;
   bool meditationRunning = false;
   bool meditationComplete = false;
   bool meditationOpeningPlayed = false;
@@ -1374,7 +1376,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       meditationRunning = false;
       meditationOpeningPlayed = false;
       meditationChantPhase = null;
-      remainingSeconds = selectedMinutes * 60;
+      remainingSeconds = selectedDurationSeconds;
     });
     meditationTimer?.cancel();
     await _saveRecords();
@@ -1428,18 +1430,43 @@ class _DevoteeShellState extends State<DevoteeShell> {
     }
   }
 
-  void _setMeditationMinutes(int minutes) {
+  void _setMeditationPresetMinutes(int minutes) {
+    _setMeditationDuration(
+      Duration(minutes: minutes),
+      custom: false,
+    );
+  }
+
+  void _setMeditationDuration(Duration duration, {required bool custom}) {
     meditationRunToken++;
     meditationTimer?.cancel();
     unawaited(chantPlayer.stop());
+    final safeSeconds = _minimumMeditationDuration(duration).inSeconds;
     setState(() {
-      selectedMinutes = minutes;
-      remainingSeconds = minutes * 60;
+      selectedDurationSeconds = safeSeconds;
+      remainingSeconds = safeSeconds;
+      customMeditationDurationSelected = custom;
       meditationRunning = false;
       meditationComplete = false;
       meditationOpeningPlayed = false;
       meditationChantPhase = null;
     });
+  }
+
+  Future<void> _openCustomMeditationDuration() async {
+    if (meditationRunning || meditationChantPhase != null) return;
+
+    final picked = await showModalBottomSheet<Duration>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CustomDurationSheet(
+        initialDuration: Duration(seconds: selectedDurationSeconds),
+      ),
+    );
+
+    if (picked == null) return;
+    _setMeditationDuration(picked, custom: true);
   }
 
   void _toggleMeditation() {
@@ -1457,7 +1484,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   Future<void> _beginMeditationSession() async {
     if (remainingSeconds <= 0) {
       setState(() {
-        remainingSeconds = selectedMinutes * 60;
+        remainingSeconds = selectedDurationSeconds;
         meditationComplete = false;
         meditationOpeningPlayed = false;
       });
@@ -1576,7 +1603,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       meditationComplete = false;
       meditationOpeningPlayed = false;
       meditationChantPhase = null;
-      remainingSeconds = selectedMinutes * 60;
+      remainingSeconds = selectedDurationSeconds;
     });
   }
 
@@ -1638,13 +1665,15 @@ class _DevoteeShellState extends State<DevoteeShell> {
         onMark: _markTask,
       ),
       PracticeTab.meditate: _MeditationScreen(
-        selectedMinutes: selectedMinutes,
+        selectedDurationSeconds: selectedDurationSeconds,
         remainingSeconds: remainingSeconds,
         meditationRunning: meditationRunning,
         meditationComplete: meditationComplete,
         meditationChantPhase: meditationChantPhase,
+        customDurationSelected: customMeditationDurationSelected,
         todayDone: today[RoutineTask.meditation.name] == true,
-        onMinutesChanged: _setMeditationMinutes,
+        onPresetMinutesChanged: _setMeditationPresetMinutes,
+        onCustomDuration: _openCustomMeditationDuration,
         onToggle: _toggleMeditation,
         onReset: _resetMeditation,
       ),
@@ -2518,33 +2547,38 @@ class _AudioCard extends StatelessWidget {
 
 class _MeditationScreen extends StatelessWidget {
   const _MeditationScreen({
-    required this.selectedMinutes,
+    required this.selectedDurationSeconds,
     required this.remainingSeconds,
     required this.meditationRunning,
     required this.meditationComplete,
     required this.meditationChantPhase,
+    required this.customDurationSelected,
     required this.todayDone,
-    required this.onMinutesChanged,
+    required this.onPresetMinutesChanged,
+    required this.onCustomDuration,
     required this.onToggle,
     required this.onReset,
   });
 
-  final int selectedMinutes;
+  final int selectedDurationSeconds;
   final int remainingSeconds;
   final bool meditationRunning;
   final bool meditationComplete;
   final MeditationChantPhase? meditationChantPhase;
+  final bool customDurationSelected;
   final bool todayDone;
-  final ValueChanged<int> onMinutesChanged;
+  final ValueChanged<int> onPresetMinutesChanged;
+  final VoidCallback onCustomDuration;
   final VoidCallback onToggle;
   final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
-    final progress = selectedMinutes == 0
+    final progress = selectedDurationSeconds == 0
         ? 0.0
-        : 1 - remainingSeconds / (selectedMinutes * 60);
+        : 1 - remainingSeconds / selectedDurationSeconds;
     final chantPlaying = meditationChantPhase != null;
+    final locked = meditationRunning || chantPlaying;
     final statusLabel = meditationChantPhase == MeditationChantPhase.opening
         ? 'Opening chant'
         : meditationChantPhase == MeditationChantPhase.closing
@@ -2619,12 +2653,19 @@ class _MeditationScreen extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            _formatSeconds(remainingSeconds),
-                            style: GoogleFonts.inter(
-                              color: AppColors.maroon,
-                              fontSize: 46,
-                              fontWeight: FontWeight.w900,
+                          SizedBox(
+                            width: 158,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _formatSeconds(remainingSeconds),
+                                maxLines: 1,
+                                style: GoogleFonts.inter(
+                                  color: AppColors.maroon,
+                                  fontSize: 46,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
                           ),
                           Text(
@@ -2645,26 +2686,56 @@ class _MeditationScreen extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 alignment: WrapAlignment.center,
-                children: [5, 10, 15, 20, 25, 30].map((minutes) {
-                  final active = selectedMinutes == minutes;
-                  return ChoiceChip(
-                    label: Text('$minutes min'),
-                    selected: active,
-                    onSelected: meditationRunning || chantPlaying
-                        ? null
-                        : (_) => onMinutesChanged(minutes),
+                children: [
+                  ...[5, 10, 15, 20, 25, 30].map((minutes) {
+                    final active = !customDurationSelected &&
+                        selectedDurationSeconds == minutes * 60;
+                    return ChoiceChip(
+                      label: Text('$minutes min'),
+                      selected: active,
+                      onSelected: locked
+                          ? null
+                          : (_) => onPresetMinutesChanged(minutes),
+                      selectedColor: AppColors.maroon,
+                      backgroundColor: AppColors.rose,
+                      labelStyle: TextStyle(
+                        color: active ? AppColors.cream : AppColors.maroon,
+                        fontWeight: FontWeight.w900,
+                      ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                    );
+                  }),
+                  ChoiceChip(
+                    avatar: Icon(
+                      Icons.schedule_rounded,
+                      size: 18,
+                      color: customDurationSelected
+                          ? AppColors.cream
+                          : AppColors.maroon,
+                    ),
+                    label: Text(customDurationSelected
+                        ? _formatDurationLabel(
+                            Duration(seconds: selectedDurationSeconds))
+                        : 'Custom time'),
+                    selected: customDurationSelected,
+                    onSelected: locked ? null : (_) => onCustomDuration(),
                     selectedColor: AppColors.maroon,
                     backgroundColor: AppColors.rose,
                     labelStyle: TextStyle(
-                      color: active ? AppColors.cream : AppColors.maroon,
+                      color: customDurationSelected
+                          ? AppColors.cream
+                          : AppColors.maroon,
                       fontWeight: FontWeight.w900,
                     ),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 12),
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
               const SizedBox(height: 22),
               Row(
@@ -2711,6 +2782,161 @@ class _MeditationScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CustomDurationSheet extends StatefulWidget {
+  const _CustomDurationSheet({required this.initialDuration});
+
+  final Duration initialDuration;
+
+  @override
+  State<_CustomDurationSheet> createState() => _CustomDurationSheetState();
+}
+
+class _CustomDurationSheetState extends State<_CustomDurationSheet> {
+  late Duration duration = _minimumMeditationDuration(widget.initialDuration);
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
+    return Material(
+      color: Colors.transparent,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(22, 18, 22, 18 + bottomPadding),
+            decoration: BoxDecoration(
+              color: AppColors.offWhite,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(8)),
+              border: Border.all(color: AppColors.borderStrong),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.deepCrimson.withValues(alpha: 0.16),
+                  blurRadius: 30,
+                  offset: const Offset(0, -12),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      _IconBadge(
+                        icon: Icons.schedule_rounded,
+                        background: AppColors.rose,
+                        color: AppColors.maroon,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Custom meditation time',
+                          style: GoogleFonts.lora(
+                            color: AppColors.ink,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            height: 1.08,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.rose.withValues(alpha: 0.56),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.self_improvement_rounded,
+                            color: AppColors.maroon),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _formatDurationLabel(duration),
+                            style: GoogleFonts.inter(
+                              color: AppColors.maroon,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 216,
+                    child: CupertinoTheme(
+                      data: CupertinoThemeData(
+                        brightness: Brightness.light,
+                        primaryColor: AppColors.maroon,
+                        textTheme: CupertinoTextThemeData(
+                          pickerTextStyle: GoogleFonts.inter(
+                            color: AppColors.ink,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      child: CupertinoTimerPicker(
+                        mode: CupertinoTimerPickerMode.hm,
+                        minuteInterval: 1,
+                        initialTimerDuration: duration,
+                        onTimerDurationChanged: (value) {
+                          setState(() =>
+                              duration = _minimumMeditationDuration(value));
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.of(context).pop(duration),
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Set time'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.maroon,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -3394,6 +3620,31 @@ class _ScreenTitle extends StatelessWidget {
   }
 }
 
+class _IconBadge extends StatelessWidget {
+  const _IconBadge({
+    required this.icon,
+    required this.background,
+    required this.color,
+  });
+
+  final IconData icon;
+  final Color background;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: color, size: 27),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title, this.action});
 
@@ -3730,9 +3981,29 @@ String _formatDuration(Duration duration) {
 
 String _formatSeconds(int total) {
   final safe = max(0, total);
-  final minutes = (safe ~/ 60).toString().padLeft(2, '0');
+  final hours = safe ~/ 3600;
+  final minutes = ((safe % 3600) ~/ 60).toString().padLeft(2, '0');
   final seconds = (safe % 60).toString().padLeft(2, '0');
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}:$minutes:$seconds';
+  }
   return '$minutes:$seconds';
+}
+
+Duration _minimumMeditationDuration(Duration duration) {
+  if (duration.inSeconds < 60) return const Duration(minutes: 1);
+  return Duration(minutes: duration.inMinutes);
+}
+
+String _formatDurationLabel(Duration duration) {
+  final safe = _minimumMeditationDuration(duration);
+  final totalMinutes = safe.inMinutes;
+  final hours = totalMinutes ~/ 60;
+  final minutes = totalMinutes % 60;
+
+  if (hours == 0) return '$minutes min';
+  if (minutes == 0) return hours == 1 ? '1 hr' : '$hours hr';
+  return '$hours hr $minutes min';
 }
 
 String _cleanNamePart(String value) {
