@@ -166,6 +166,83 @@ enum SatsangSession { morning, evening }
 
 enum RoutineTask { morningSatsang, eveningSatsang, meditation }
 
+class DevoteeProfile {
+  const DevoteeProfile({
+    required this.firstName,
+    this.middleName = '',
+    this.lastName = '',
+  });
+
+  final String firstName;
+  final String middleName;
+  final String lastName;
+
+  String get displayName => firstName;
+
+  String get fullName => [
+        firstName,
+        middleName,
+        lastName,
+      ].where((part) => part.trim().isNotEmpty).join(' ');
+
+  Map<String, String> toJson() => {
+        'firstName': firstName,
+        'middleName': middleName,
+        'lastName': lastName,
+      };
+
+  static DevoteeProfile? fromParts({
+    required String firstName,
+    required String middleName,
+    required String lastName,
+  }) {
+    final first = _cleanNamePart(firstName);
+    if (first.isEmpty) return null;
+
+    return DevoteeProfile(
+      firstName: first,
+      middleName: _cleanNamePart(middleName),
+      lastName: _cleanNamePart(lastName),
+    );
+  }
+
+  static DevoteeProfile? fromStoredValue(String? value) {
+    final clean = value?.trim();
+    if (clean == null || clean.isEmpty) return null;
+
+    if (clean.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(clean);
+        if (decoded is Map) {
+          return fromParts(
+            firstName: decoded['firstName']?.toString() ?? '',
+            middleName: decoded['middleName']?.toString() ?? '',
+            lastName: decoded['lastName']?.toString() ?? '',
+          );
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final parts = clean.split(RegExp(r'\s+'));
+    if (parts.isEmpty) return null;
+    if (parts.length == 1) {
+      return fromParts(firstName: parts.first, middleName: '', lastName: '');
+    }
+    if (parts.length == 2) {
+      return fromParts(
+          firstName: parts.first, middleName: '', lastName: parts.last);
+    }
+
+    return fromParts(
+      firstName: parts.first,
+      middleName: parts.sublist(1, parts.length - 1).join(' '),
+      lastName: parts.last,
+    );
+  }
+}
+
 class SatsangTrack {
   const SatsangTrack({
     required this.id,
@@ -1102,9 +1179,9 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   PracticeTab tab = PracticeTab.home;
   SatsangSession selectedSession = _defaultSession();
-  String devoteeName = '';
+  DevoteeProfile? devoteeProfile;
   bool localStateLoaded = false;
-  bool needsFullName = false;
+  bool needsProfileName = false;
   Map<String, Map<String, bool>> records = {};
   String? activeTrackId;
   RoutineTask? activeTrackTask;
@@ -1160,15 +1237,21 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   Future<void> _loadLocalState() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedName = prefs.getString(_nameStorageKey) ??
+    final savedUserName = prefs.getString(_nameStorageKey);
+    final savedName = savedUserName ??
         (widget.user == null ? null : prefs.getString(nameKey));
     final savedRecords = prefs.getString(_routineStorageKey) ??
         (widget.user == null ? null : prefs.getString(routineKey));
+    final savedProfile = DevoteeProfile.fromStoredValue(savedName);
 
-    if (savedName != null && savedName.trim().isNotEmpty) {
-      devoteeName = savedName.trim();
+    if (savedProfile != null) {
+      devoteeProfile = savedProfile;
+      if (savedUserName == null && widget.user != null) {
+        await prefs.setString(
+            _nameStorageKey, jsonEncode(savedProfile.toJson()));
+      }
     } else {
-      needsFullName = true;
+      needsProfileName = true;
     }
 
     if (savedRecords != null) {
@@ -1195,14 +1278,13 @@ class _DevoteeShellState extends State<DevoteeShell> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _saveFullName(String name) async {
-    final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+  Future<void> _saveProfile(DevoteeProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_nameStorageKey, clean);
+    await prefs.setString(_nameStorageKey, jsonEncode(profile.toJson()));
     if (mounted) {
       setState(() {
-        devoteeName = clean;
-        needsFullName = false;
+        devoteeProfile = profile;
+        needsProfileName = false;
       });
     }
   }
@@ -1395,7 +1477,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   @override
   Widget build(BuildContext context) {
-    if (!localStateLoaded || needsFullName) {
+    if (!localStateLoaded || needsProfileName) {
       return Scaffold(
         body: Stack(
           children: [
@@ -1403,7 +1485,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
             SafeArea(
               child: !localStateLoaded
                   ? const _ProfileLoadingScreen()
-                  : _FullNameOnboardingScreen(onContinue: _saveFullName),
+                  : _NameOnboardingScreen(onContinue: _saveProfile),
             ),
           ],
         ),
@@ -1412,7 +1494,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
     final screens = {
       PracticeTab.home: _HomeScreen(
-        name: devoteeName,
+        name: devoteeProfile?.displayName ?? 'Bhakt',
         today: today,
         stats: stats,
         onOpenSatsang: (session) {
@@ -1526,33 +1608,40 @@ class _ProfileLoadingScreen extends StatelessWidget {
   }
 }
 
-class _FullNameOnboardingScreen extends StatefulWidget {
-  const _FullNameOnboardingScreen({required this.onContinue});
+class _NameOnboardingScreen extends StatefulWidget {
+  const _NameOnboardingScreen({required this.onContinue});
 
-  final ValueChanged<String> onContinue;
+  final ValueChanged<DevoteeProfile> onContinue;
 
   @override
-  State<_FullNameOnboardingScreen> createState() =>
-      _FullNameOnboardingScreenState();
+  State<_NameOnboardingScreen> createState() => _NameOnboardingScreenState();
 }
 
-class _FullNameOnboardingScreenState extends State<_FullNameOnboardingScreen> {
-  final controller = TextEditingController();
+class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
+  final firstName = TextEditingController();
+  final middleName = TextEditingController();
+  final lastName = TextEditingController();
   String? error;
 
   @override
   void dispose() {
-    controller.dispose();
+    firstName.dispose();
+    middleName.dispose();
+    lastName.dispose();
     super.dispose();
   }
 
   void _continue() {
-    final clean = controller.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (clean.length < 2) {
-      setState(() => error = 'Please enter your full name.');
+    final profile = DevoteeProfile.fromParts(
+      firstName: firstName.text,
+      middleName: middleName.text,
+      lastName: lastName.text,
+    );
+    if (profile == null) {
+      setState(() => error = 'Please enter your first name.');
       return;
     }
-    widget.onContinue(clean);
+    widget.onContinue(profile);
   }
 
   @override
@@ -1603,20 +1692,41 @@ class _FullNameOnboardingScreenState extends State<_FullNameOnboardingScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Please enter your full name to begin your daily spiritual routine.',
+                  'Please enter your name to begin your daily spiritual routine.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 24),
                 TextField(
-                  controller: controller,
+                  controller: firstName,
                   autofocus: true,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) {
+                    if (error != null) setState(() => error = null);
+                  },
+                  decoration: _inputDecoration('First name').copyWith(
+                    errorText: error,
+                    prefixIcon: const Icon(Icons.person_rounded),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: middleName,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: _inputDecoration('Middle name').copyWith(
+                    prefixIcon: const Icon(Icons.badge_rounded),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: lastName,
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _continue(),
-                  decoration: _inputDecoration('Full name').copyWith(
-                    errorText: error,
-                    prefixIcon: const Icon(Icons.person_rounded),
+                  decoration: _inputDecoration('Last name').copyWith(
+                    prefixIcon: const Icon(Icons.family_restroom_rounded),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -3498,6 +3608,10 @@ String _formatSeconds(int total) {
   final minutes = (safe ~/ 60).toString().padLeft(2, '0');
   final seconds = (safe % 60).toString().padLeft(2, '0');
   return '$minutes:$seconds';
+}
+
+String _cleanNamePart(String value) {
+  return value.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
 
 String? _normalizedPhone(String value) {

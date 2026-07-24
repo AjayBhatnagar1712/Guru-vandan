@@ -64,6 +64,8 @@ Before production, create proper Firebase web and iOS apps in the same Firebase 
 ## Sign In Setup
 
 The app asks first-time users to sign in before entering the routine screens.
+After sign-in, it collects first, middle, and last name separately. The home
+screen greets the devotee by first name only.
 
 Supported sign-in methods:
 
