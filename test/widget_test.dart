@@ -5,6 +5,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:guruvandan_flutter/main.dart';
 
 void main() {
+  Future<void> pumpSavedHome(WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+    });
+
+    await tester.pumpWidget(
+        const GuruvandanApp(firebaseReady: false, showOpening: false));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('Enter'));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('First launch asks for split name', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
 
@@ -54,5 +67,44 @@ void main() {
     expect(find.textContaining('Kumar'), findsNothing);
     expect(find.textContaining('Bhatnagar'), findsNothing);
     expect(find.text('Today\'s Routine'), findsOneWidget);
+  });
+
+  testWidgets('Home hero morning chip opens morning satsang', (tester) async {
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Morning satsang').first);
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text(
+            'Morning, evening, and aarti audio for steady daily devotion.'),
+        findsOneWidget);
+    expect(find.text('Morning Satsang'), findsOneWidget);
+  });
+
+  testWidgets('Home hero evening chip opens evening satsang', (tester) async {
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Evening satsang').first);
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text(
+            'Morning, evening, and aarti audio for steady daily devotion.'),
+        findsOneWidget);
+    expect(find.text('Shaam Satsang'), findsOneWidget);
+  });
+
+  testWidgets('Home hero dhyan chip opens meditation', (tester) async {
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Dhyan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Meditation'), findsOneWidget);
+    expect(
+        find.text(
+            'Set your duration. The chime plays only when the timer ends.'),
+        findsOneWidget);
   });
 }

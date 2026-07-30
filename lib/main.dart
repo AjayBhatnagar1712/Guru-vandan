@@ -2111,7 +2111,12 @@ class _HomeScreen extends StatelessWidget {
 
         return _PageScaffold(
           children: [
-            _HeroPanel(name: name),
+            _HeroPanel(
+              name: name,
+              onMorningSatsang: () => onOpenSatsang(SatsangSession.morning),
+              onMeditation: onOpenMeditation,
+              onEveningSatsang: () => onOpenSatsang(SatsangSession.evening),
+            ),
             _StatsRibbon(stats: stats),
             _SectionHeader(
               title: 'Today\'s Routine',
@@ -2153,9 +2158,17 @@ class _HomeScreen extends StatelessWidget {
 }
 
 class _HeroPanel extends StatelessWidget {
-  const _HeroPanel({required this.name});
+  const _HeroPanel({
+    required this.name,
+    required this.onMorningSatsang,
+    required this.onMeditation,
+    required this.onEveningSatsang,
+  });
 
   final String name;
+  final VoidCallback onMorningSatsang;
+  final VoidCallback onMeditation;
+  final VoidCallback onEveningSatsang;
 
   @override
   Widget build(BuildContext context) {
@@ -2242,19 +2255,25 @@ class _HeroPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Wrap(
+                    Wrap(
                       spacing: 10,
                       runSpacing: 10,
                       children: [
                         _HeroChip(
-                            icon: Icons.wb_sunny_rounded,
-                            label: 'Morning satsang'),
+                          icon: Icons.wb_sunny_rounded,
+                          label: 'Morning satsang',
+                          onTap: onMorningSatsang,
+                        ),
                         _HeroChip(
-                            icon: Icons.self_improvement_rounded,
-                            label: 'Dhyan'),
+                          icon: Icons.self_improvement_rounded,
+                          label: 'Dhyan',
+                          onTap: onMeditation,
+                        ),
                         _HeroChip(
-                            icon: Icons.nights_stay_rounded,
-                            label: 'Evening satsang'),
+                          icon: Icons.nights_stay_rounded,
+                          label: 'Evening satsang',
+                          onTap: onEveningSatsang,
+                        ),
                       ],
                     ),
                   ],
@@ -2301,33 +2320,51 @@ class _GuruPortrait extends StatelessWidget {
 }
 
 class _HeroChip extends StatelessWidget {
-  const _HeroChip({required this.icon, required this.label});
+  const _HeroChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.offWhite.withValues(alpha: 0.14),
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.offWhite.withValues(alpha: 0.22)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: AppColors.softGold),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.offWhite,
-              fontWeight: FontWeight.w800,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.offWhite.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(8),
+              border:
+                  Border.all(color: AppColors.offWhite.withValues(alpha: 0.22)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: AppColors.softGold),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.offWhite,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
