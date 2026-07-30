@@ -107,4 +107,18 @@ void main() {
             'Set your duration. The chime plays only when the timer ends.'),
         findsOneWidget);
   });
+
+  testWidgets('More tab shows coming soon modules', (tester) async {
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Modules'), findsOneWidget);
+    expect(find.text('Shop'), findsOneWidget);
+    expect(find.text('Events'), findsOneWidget);
+    expect(find.text('Guru Gallery'), findsOneWidget);
+    expect(find.text('Jigyasa'), findsOneWidget);
+    expect(find.text('Coming soon'), findsNWidgets(4));
+  });
 }

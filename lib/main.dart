@@ -3325,7 +3325,7 @@ class _MoreScreen extends StatelessWidget {
         const _ScreenTitle(
           icon: Icons.tune_rounded,
           title: 'More',
-          subtitle: 'Personal settings and admin tools.',
+          subtitle: 'Upcoming modules, personal settings, and admin tools.',
         ),
         Container(
           padding: const EdgeInsets.all(22),
@@ -3360,6 +3360,7 @@ class _MoreScreen extends StatelessWidget {
             ],
           ),
         ),
+        const _ComingSoonModules(),
         if (user != null)
           Container(
             padding: const EdgeInsets.all(22),
@@ -3412,6 +3413,148 @@ class _MoreScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ComingSoonModules extends StatelessWidget {
+  const _ComingSoonModules();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionHeader(title: 'Modules'),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final twoColumns = constraints.maxWidth >= 560;
+            final spacing = twoColumns ? 12.0 : 10.0;
+            final cardWidth = twoColumns
+                ? (constraints.maxWidth - spacing) / 2
+                : constraints.maxWidth;
+
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: const [
+                _ComingSoonModuleCard(
+                  icon: Icons.shopping_bag_outlined,
+                  title: 'Shop',
+                  subtitle: 'Devotional items and books',
+                  accentColor: AppColors.gold,
+                ),
+                _ComingSoonModuleCard(
+                  icon: Icons.event_available_rounded,
+                  title: 'Events',
+                  subtitle: 'Satsang dates and community gatherings',
+                  accentColor: AppColors.sage,
+                ),
+                _ComingSoonModuleCard(
+                  icon: Icons.photo_library_rounded,
+                  title: 'Guru Gallery',
+                  subtitle: 'Sacred photos and memories',
+                  accentColor: AppColors.river,
+                ),
+                _ComingSoonModuleCard(
+                  icon: Icons.question_answer_rounded,
+                  title: 'Jigyasa',
+                  subtitle: 'Questions and guidance',
+                  accentColor: AppColors.maroon,
+                ),
+              ].map((card) => SizedBox(width: cardWidth, child: card)).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ComingSoonModuleCard extends StatelessWidget {
+  const _ComingSoonModuleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.accentColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 132),
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(
+        color: AppColors.offWhite,
+        borderColor: AppColors.border,
+      ).copyWith(
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.09),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border:
+                      Border.all(color: accentColor.withValues(alpha: 0.22)),
+                ),
+                child: Icon(icon, color: accentColor, size: 26),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.rose,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Text(
+                  'Coming soon',
+                  style: TextStyle(
+                    color: AppColors.maroon,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Text(
+            title,
+            style:
+                Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 19),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontSize: 16,
+                  height: 1.32,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }
