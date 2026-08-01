@@ -1189,6 +1189,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   late final FirebaseContentService content;
   final satsangPlayer = AudioPlayer();
   final chantPlayer = AudioPlayer();
+  final mantraLoopPlayer = AudioPlayer();
 
   PracticeTab tab = PracticeTab.home;
   SatsangSession selectedSession = _defaultSession();
@@ -1206,6 +1207,8 @@ class _DevoteeShellState extends State<DevoteeShell> {
   bool customMeditationDurationSelected = false;
   bool meditationRunning = false;
   bool meditationComplete = false;
+  bool mantraLoopEnabled = false;
+  bool mantraLoopPlaying = false;
   int meditationRunToken = 0;
   MeditationChantPhase? meditationChantPhase;
   bool welcomeDialogShown = false;
@@ -1224,6 +1227,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
     meditationTimer?.cancel();
     satsangPlayer.dispose();
     chantPlayer.dispose();
+    mantraLoopPlayer.dispose();
     super.dispose();
   }
 
@@ -1242,6 +1246,11 @@ class _DevoteeShellState extends State<DevoteeShell> {
           activeTrackTask = null;
           audioPosition = Duration.zero;
         });
+      }
+    });
+    mantraLoopPlayer.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() => mantraLoopPlaying = state == PlayerState.playing);
       }
     });
   }
@@ -1433,6 +1442,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
     meditationTimer?.cancel();
     await satsangPlayer.stop();
     await chantPlayer.stop();
+    await mantraLoopPlayer.stop();
     await FirebaseAuth.instance.signOut();
   }
 
@@ -1440,6 +1450,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
     final task = _routineTaskForSatsangSession(track.session);
 
     try {
+      await _stopMantraLoop();
       if (activeTrackId == track.id) {
         final state = satsangPlayer.state;
         if (state == PlayerState.playing) {
@@ -1570,6 +1581,10 @@ class _DevoteeShellState extends State<DevoteeShell> {
   Future<void> _finishMeditationSession(int token) async {
     if (!mounted || token != meditationRunToken) return;
 
+    await _stopMantraLoop();
+
+    if (!mounted || token != meditationRunToken) return;
+
     setState(() {
       meditationChantPhase = MeditationChantPhase.closing;
       meditationRunning = false;
@@ -1614,6 +1629,50 @@ class _DevoteeShellState extends State<DevoteeShell> {
       await completeSub.cancel();
       await stateSub.cancel();
     }
+  }
+
+  Future<void> _setMantraLoopEnabled(bool enabled) async {
+    if (enabled) {
+      await _playMantraLoop();
+    } else {
+      await _stopMantraLoop();
+    }
+  }
+
+  Future<void> _playMantraLoop() async {
+    if (meditationChantPhase != null) return;
+
+    try {
+      await satsangPlayer.stop();
+      await mantraLoopPlayer.stop();
+      await mantraLoopPlayer.setReleaseMode(ReleaseMode.loop);
+      await mantraLoopPlayer
+          .play(AssetSource('audio/om_mantra_417hz_loop.mp3'));
+
+      if (!mounted) return;
+      setState(() {
+        mantraLoopEnabled = true;
+        mantraLoopPlaying = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        mantraLoopEnabled = false;
+        mantraLoopPlaying = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Om mantra audio could not be played.')),
+      );
+    }
+  }
+
+  Future<void> _stopMantraLoop() async {
+    await mantraLoopPlayer.stop();
+    if (!mounted) return;
+    setState(() {
+      mantraLoopEnabled = false;
+      mantraLoopPlaying = false;
+    });
   }
 
   void _resetMeditation() {
@@ -1691,10 +1750,13 @@ class _DevoteeShellState extends State<DevoteeShell> {
         meditationRunning: meditationRunning,
         meditationComplete: meditationComplete,
         meditationChantPhase: meditationChantPhase,
+        mantraLoopEnabled: mantraLoopEnabled,
+        mantraLoopPlaying: mantraLoopPlaying,
         customDurationSelected: customMeditationDurationSelected,
         todayDone: today[RoutineTask.meditation.name] == true,
         onPresetMinutesChanged: _setMeditationPresetMinutes,
         onCustomDuration: _openCustomMeditationDuration,
+        onMantraLoopChanged: _setMantraLoopEnabled,
         onToggle: _toggleMeditation,
         onReset: _resetMeditation,
       ),
@@ -2789,10 +2851,13 @@ class _MeditationScreen extends StatelessWidget {
     required this.meditationRunning,
     required this.meditationComplete,
     required this.meditationChantPhase,
+    required this.mantraLoopEnabled,
+    required this.mantraLoopPlaying,
     required this.customDurationSelected,
     required this.todayDone,
     required this.onPresetMinutesChanged,
     required this.onCustomDuration,
+    required this.onMantraLoopChanged,
     required this.onToggle,
     required this.onReset,
   });
@@ -2802,10 +2867,13 @@ class _MeditationScreen extends StatelessWidget {
   final bool meditationRunning;
   final bool meditationComplete;
   final MeditationChantPhase? meditationChantPhase;
+  final bool mantraLoopEnabled;
+  final bool mantraLoopPlaying;
   final bool customDurationSelected;
   final bool todayDone;
   final ValueChanged<int> onPresetMinutesChanged;
   final VoidCallback onCustomDuration;
+  final ValueChanged<bool> onMantraLoopChanged;
   final VoidCallback onToggle;
   final VoidCallback onReset;
 
@@ -2971,6 +3039,13 @@ class _MeditationScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 22),
+              _MantraLoopSwitch(
+                enabled: mantraLoopEnabled,
+                playing: mantraLoopPlaying,
+                locked: chantPlaying,
+                onChanged: onMantraLoopChanged,
+              ),
+              const SizedBox(height: 18),
               Row(
                 children: [
                   Expanded(
@@ -3015,6 +3090,97 @@ class _MeditationScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MantraLoopSwitch extends StatelessWidget {
+  const _MantraLoopSwitch({
+    required this.enabled,
+    required this.playing,
+    required this.locked,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final bool playing;
+  final bool locked;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = enabled
+        ? playing
+            ? 'Playing in loop'
+            : 'Starting'
+        : '417Hz mantra ambience';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: _cardDecoration(
+        color: const Color(0xFFFFF8EF),
+        borderColor: enabled ? AppColors.softGold : AppColors.border,
+      ).copyWith(
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.gold.withValues(alpha: enabled ? 0.16 : 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: enabled
+                  ? AppColors.gold.withValues(alpha: 0.16)
+                  : AppColors.rose,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: enabled ? AppColors.softGold : AppColors.border,
+              ),
+            ),
+            child: Icon(
+              enabled ? Icons.spatial_audio_rounded : Icons.music_note_rounded,
+              color: enabled ? AppColors.gold : AppColors.maroon,
+              size: 27,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Om mantra',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontSize: 19),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  status,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontSize: 16,
+                        height: 1.28,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Switch.adaptive(
+            value: enabled,
+            onChanged: locked ? null : onChanged,
+            activeThumbColor: AppColors.maroon,
+            activeTrackColor: AppColors.softGold,
+          ),
+        ],
+      ),
     );
   }
 }

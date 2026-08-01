@@ -106,6 +106,8 @@ void main() {
         find.text(
             'Set your duration. The chime plays only when the timer ends.'),
         findsOneWidget);
+    expect(find.text('Om mantra'), findsOneWidget);
+    expect(find.text('417Hz mantra ambience'), findsOneWidget);
   });
 
   testWidgets('More tab shows coming soon modules', (tester) async {
