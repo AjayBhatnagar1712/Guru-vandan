@@ -122,5 +122,26 @@ void main() {
     expect(find.text('Guru Gallery'), findsOneWidget);
     expect(find.text('Jigyasa'), findsOneWidget);
     expect(find.text('Coming soon'), findsNWidgets(4));
+    expect(find.text('Admin content'), findsNothing);
+    expect(find.text('Open admin console'), findsNothing);
+  });
+
+  testWidgets('Meditation start asks user to put phone on silent',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Dhyan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Put phone on silent'), findsOneWidget);
+    expect(
+      find.textContaining('Please put your phone on silent mode'),
+      findsOneWidget,
+    );
   });
 }

@@ -36,6 +36,7 @@ const firebaseOptions = FirebaseOptions(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _configureLongFormAudio();
   var firebaseReady = false;
 
   try {
@@ -49,6 +50,22 @@ Future<void> main() async {
   }
 
   runApp(GuruvandanApp(firebaseReady: firebaseReady));
+}
+
+Future<void> _configureLongFormAudio() async {
+  try {
+    await AudioPlayer.global.setAudioContext(_longFormAudioContext());
+  } catch (_) {
+    // Web and some test platforms do not expose native audio-session controls.
+  }
+}
+
+AudioContext _longFormAudioContext() {
+  return AudioContextConfig(
+    focus: AudioContextConfigFocus.gain,
+    respectSilence: false,
+    stayAwake: true,
+  ).build();
 }
 
 class GuruvandanApp extends StatelessWidget {
@@ -136,6 +153,9 @@ class GuruvandanApp extends StatelessWidget {
       home: showOpening
           ? SpiritualOpening(firebaseReady: firebaseReady)
           : AuthGate(firebaseReady: firebaseReady),
+      routes: {
+        '/admin': (_) => _AdminRoute(firebaseReady: firebaseReady),
+      },
     );
   }
 }
@@ -1182,7 +1202,8 @@ class DevoteeShell extends StatefulWidget {
   State<DevoteeShell> createState() => _DevoteeShellState();
 }
 
-class _DevoteeShellState extends State<DevoteeShell> {
+class _DevoteeShellState extends State<DevoteeShell>
+    with WidgetsBindingObserver {
   static const routineKey = 'guruvandan_flutter:routine';
   static const nameKey = 'guruvandan_flutter:name';
 
@@ -1209,26 +1230,38 @@ class _DevoteeShellState extends State<DevoteeShell> {
   bool meditationComplete = false;
   bool mantraLoopEnabled = false;
   bool mantraLoopPlaying = false;
+  bool silentPromptOpen = false;
   int meditationRunToken = 0;
   MeditationChantPhase? meditationChantPhase;
+  DateTime? meditationEndsAt;
   bool welcomeDialogShown = false;
   Timer? meditationTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     content = FirebaseContentService(widget.firebaseReady);
     _loadLocalState();
     _wireAudio();
+    _configureAudioPlayers();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     meditationTimer?.cancel();
     satsangPlayer.dispose();
     chantPlayer.dispose();
     mantraLoopPlayer.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncMeditationTimerWithClock();
+    }
   }
 
   void _wireAudio() {
@@ -1253,6 +1286,13 @@ class _DevoteeShellState extends State<DevoteeShell> {
         setState(() => mantraLoopPlaying = state == PlayerState.playing);
       }
     });
+  }
+
+  void _configureAudioPlayers() {
+    final context = _longFormAudioContext();
+    unawaited(satsangPlayer.setAudioContext(context).catchError((_) {}));
+    unawaited(chantPlayer.setAudioContext(context).catchError((_) {}));
+    unawaited(mantraLoopPlayer.setAudioContext(context).catchError((_) {}));
   }
 
   String get _nameStorageKey =>
@@ -1431,6 +1471,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       meditationComplete = false;
       meditationRunning = false;
       meditationChantPhase = null;
+      meditationEndsAt = null;
       remainingSeconds = selectedDurationSeconds;
     });
     meditationTimer?.cancel();
@@ -1440,6 +1481,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
   Future<void> _signOut() async {
     meditationRunToken++;
     meditationTimer?.cancel();
+    meditationEndsAt = null;
     await satsangPlayer.stop();
     await chantPlayer.stop();
     await mantraLoopPlayer.stop();
@@ -1450,18 +1492,25 @@ class _DevoteeShellState extends State<DevoteeShell> {
     final task = _routineTaskForSatsangSession(track.session);
 
     try {
-      await _stopMantraLoop();
       if (activeTrackId == track.id) {
         final state = satsangPlayer.state;
         if (state == PlayerState.playing) {
           await satsangPlayer.pause();
         } else {
+          final confirmed =
+              await _confirmPhoneSilent('your satsang can continue peacefully');
+          if (!confirmed) return;
           await satsangPlayer.resume();
         }
         setState(() {});
         return;
       }
 
+      final confirmed =
+          await _confirmPhoneSilent('your satsang can continue peacefully');
+      if (!confirmed) return;
+
+      await _stopMantraLoop();
       await satsangPlayer.stop();
       audioPosition = Duration.zero;
       audioDuration = Duration.zero;
@@ -1507,6 +1556,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       meditationRunning = false;
       meditationComplete = false;
       meditationChantPhase = null;
+      meditationEndsAt = null;
     });
   }
 
@@ -1530,8 +1580,12 @@ class _DevoteeShellState extends State<DevoteeShell> {
     if (meditationChantPhase != null) return;
 
     if (meditationRunning) {
+      _syncMeditationTimerWithClock();
       meditationTimer?.cancel();
-      setState(() => meditationRunning = false);
+      setState(() {
+        meditationRunning = false;
+        meditationEndsAt = null;
+      });
       return;
     }
 
@@ -1539,6 +1593,10 @@ class _DevoteeShellState extends State<DevoteeShell> {
   }
 
   Future<void> _beginMeditationSession() async {
+    final confirmed =
+        await _confirmPhoneSilent('your meditation can stay undisturbed');
+    if (!confirmed) return;
+
     if (remainingSeconds <= 0) {
       setState(() {
         remainingSeconds = selectedDurationSeconds;
@@ -1552,30 +1610,47 @@ class _DevoteeShellState extends State<DevoteeShell> {
 
   void _startMeditationTimer(int token) {
     meditationTimer?.cancel();
-    meditationTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    meditationEndsAt = DateTime.now().add(Duration(seconds: remainingSeconds));
+    meditationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (token != meditationRunToken) {
         timer.cancel();
         return;
       }
 
-      if (remainingSeconds <= 1) {
-        timer.cancel();
-        if (mounted) {
-          setState(() {
-            remainingSeconds = 0;
-            meditationRunning = false;
-          });
-        }
-        await _finishMeditationSession(token);
-        return;
-      }
-
-      if (mounted) {
-        setState(() => remainingSeconds--);
-      }
+      _syncMeditationTimerWithClock(token: token);
     });
 
     setState(() => meditationRunning = true);
+  }
+
+  void _syncMeditationTimerWithClock({int? token}) {
+    if (!mounted ||
+        !meditationRunning ||
+        meditationChantPhase != null ||
+        meditationEndsAt == null) {
+      return;
+    }
+    if (token != null && token != meditationRunToken) return;
+
+    final millisecondsLeft =
+        meditationEndsAt!.difference(DateTime.now()).inMilliseconds;
+    final nextRemaining = max(0, (millisecondsLeft / 1000).ceil());
+
+    if (nextRemaining <= 0) {
+      final activeToken = token ?? meditationRunToken;
+      meditationTimer?.cancel();
+      setState(() {
+        remainingSeconds = 0;
+        meditationRunning = false;
+        meditationEndsAt = null;
+      });
+      unawaited(_finishMeditationSession(activeToken));
+      return;
+    }
+
+    if (nextRemaining != remainingSeconds) {
+      setState(() => remainingSeconds = nextRemaining);
+    }
   }
 
   Future<void> _finishMeditationSession(int token) async {
@@ -1588,6 +1663,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
     setState(() {
       meditationChantPhase = MeditationChantPhase.closing;
       meditationRunning = false;
+      meditationEndsAt = null;
     });
 
     try {
@@ -1606,6 +1682,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
     setState(() {
       meditationChantPhase = null;
       meditationComplete = true;
+      meditationEndsAt = null;
     });
   }
 
@@ -1642,6 +1719,10 @@ class _DevoteeShellState extends State<DevoteeShell> {
   Future<void> _playMantraLoop() async {
     if (meditationChantPhase != null) return;
 
+    final confirmed = await _confirmPhoneSilent(
+        'the Om mantra can play without interruption');
+    if (!confirmed) return;
+
     try {
       await satsangPlayer.stop();
       await mantraLoopPlayer.stop();
@@ -1675,6 +1756,23 @@ class _DevoteeShellState extends State<DevoteeShell> {
     });
   }
 
+  Future<bool> _confirmPhoneSilent(String reason) async {
+    if (!mounted) return false;
+    if (silentPromptOpen) return false;
+
+    silentPromptOpen = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _SilentPhoneDialog(reason: reason),
+      );
+      return confirmed == true;
+    } finally {
+      silentPromptOpen = false;
+    }
+  }
+
   void _resetMeditation() {
     meditationRunToken++;
     meditationTimer?.cancel();
@@ -1683,6 +1781,7 @@ class _DevoteeShellState extends State<DevoteeShell> {
       meditationRunning = false;
       meditationComplete = false;
       meditationChantPhase = null;
+      meditationEndsAt = null;
       remainingSeconds = selectedDurationSeconds;
     });
   }
@@ -1762,15 +1861,8 @@ class _DevoteeShellState extends State<DevoteeShell> {
       ),
       PracticeTab.wisdom: _WisdomScreen(quotesStream: content.quotes()),
       PracticeTab.more: _MoreScreen(
-        firebaseReady: widget.firebaseReady,
         user: widget.user,
         onSignOut: _signOut,
-        onOpenAdmin: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => AdminConsole(
-                content: content, firebaseReady: widget.firebaseReady),
-          ),
-        ),
       ),
     };
 
@@ -2138,6 +2230,68 @@ class _GuruWelcomeDialog extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SilentPhoneDialog extends StatelessWidget {
+  const _SilentPhoneDialog({required this.reason});
+
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        backgroundColor: AppColors.offWhite,
+        surfaceTintColor: AppColors.offWhite,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppColors.borderStrong),
+        ),
+        icon: Container(
+          width: 58,
+          height: 58,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.rose,
+          ),
+          child: const Icon(
+            Icons.notifications_paused_rounded,
+            color: AppColors.maroon,
+            size: 31,
+          ),
+        ),
+        title: Text(
+          'Put phone on silent',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.lora(
+            color: AppColors.ink,
+            fontSize: 25,
+            height: 1.1,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        content: Text(
+          'Please put your phone on silent mode so $reason.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(54),
+              backgroundColor: AppColors.maroon,
+              foregroundColor: AppColors.offWhite,
+            ),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -3473,16 +3627,12 @@ class _WisdomQuoteCard extends StatelessWidget {
 
 class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
-    required this.firebaseReady,
     required this.user,
     required this.onSignOut,
-    required this.onOpenAdmin,
   });
 
-  final bool firebaseReady;
   final User? user;
   final VoidCallback onSignOut;
-  final VoidCallback onOpenAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -3491,7 +3641,7 @@ class _MoreScreen extends StatelessWidget {
         const _ScreenTitle(
           icon: Icons.tune_rounded,
           title: 'More',
-          subtitle: 'Upcoming modules, personal settings, and admin tools.',
+          subtitle: 'Upcoming modules and personal settings.',
         ),
         Container(
           padding: const EdgeInsets.all(22),
@@ -3549,35 +3699,6 @@ class _MoreScreen extends StatelessWidget {
               ],
             ),
           ),
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: _cardDecoration(color: const Color(0xFFFFF8EF)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Admin content',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(
-                firebaseReady
-                    ? 'Firebase is connected. Admin can upload satsang audio and publish quotes.'
-                    : 'Firebase is not connected yet. The app is using bundled fallback content.',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.tonalIcon(
-                onPressed: onOpenAdmin,
-                icon: const Icon(Icons.admin_panel_settings_rounded),
-                label: const Text('Open admin console'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(54),
-                  textStyle: const TextStyle(
-                      fontWeight: FontWeight.w900, fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -3721,6 +3842,45 @@ class _ComingSoonModuleCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AdminRoute extends StatelessWidget {
+  const _AdminRoute({required this.firebaseReady});
+
+  final bool firebaseReady;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!firebaseReady) {
+      return AdminConsole(
+        content: FirebaseContentService(firebaseReady),
+        firebaseReady: firebaseReady,
+      );
+    }
+
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            snapshot.data == null) {
+          return const _AuthLoadingScaffold();
+        }
+
+        if (snapshot.data == null) {
+          return const _SignInScreen(
+            initialStatus:
+                'Admin access: sign in with the authorized Guruvandan admin account.',
+          );
+        }
+
+        return AdminConsole(
+          content: FirebaseContentService(firebaseReady),
+          firebaseReady: firebaseReady,
+        );
+      },
     );
   }
 }
