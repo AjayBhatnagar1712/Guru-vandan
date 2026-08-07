@@ -3,11 +3,9 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:audio_session/audio_session.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -929,25 +927,7 @@ class FirebaseContentService {
   final bool ready;
 
   Stream<List<SatsangTrack>> satsangs() {
-    if (!ready) return Stream.value(fallbackSatsangs);
-
-    return FirebaseDatabase.instance.ref('satsangs').onValue.map((event) {
-      final value = event.snapshot.value;
-      if (value is! Map) return fallbackSatsangs;
-
-      final items = value.entries
-          .map((entry) {
-            if (entry.value is! Map) return null;
-            return SatsangTrack.fromEntry(entry.key.toString(),
-                Map<dynamic, dynamic>.from(entry.value as Map));
-          })
-          .whereType<SatsangTrack>()
-          .where((item) => item.active)
-          .toList()
-        ..sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
-
-      return items.isEmpty ? fallbackSatsangs : items;
-    }).handleError((_) => fallbackSatsangs);
+    return Stream.value(fallbackSatsangs);
   }
 
   Stream<List<WisdomQuote>> quotes() {
@@ -992,42 +972,6 @@ class FirebaseContentService {
         ..sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
 
       return items;
-    });
-  }
-
-  Future<void> uploadSatsang({
-    required PlatformFile file,
-    required SatsangSession session,
-    required String title,
-    required String description,
-    required String durationLabel,
-  }) async {
-    if (!ready) throw StateError('Firebase is not configured.');
-    if (file.bytes == null) {
-      throw StateError('Could not read the selected file.');
-    }
-
-    final safeName =
-        file.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._-]+'), '-');
-    final path =
-        'satsang/${session.name}/${DateTime.now().millisecondsSinceEpoch}-$safeName';
-    final storageRef = FirebaseStorage.instance.ref(path);
-    await storageRef.putData(file.bytes!,
-        SettableMetadata(contentType: _audioContentType(file.name)));
-    final url = await storageRef.getDownloadURL();
-    final key = FirebaseDatabase.instance.ref('satsangs').push().key;
-    if (key == null) throw StateError('Could not create a satsang record.');
-
-    await FirebaseDatabase.instance.ref('satsangs/$key').set({
-      'session': session.name,
-      'title': title,
-      'description': description,
-      'durationLabel': durationLabel,
-      'audioUrl': url,
-      'storagePath': path,
-      'active': true,
-      'createdAt': ServerValue.timestamp,
-      'createdBy': FirebaseAuth.instance.currentUser?.email,
     });
   }
 
@@ -5646,16 +5590,11 @@ class AdminConsole extends StatefulWidget {
 class _AdminConsoleState extends State<AdminConsole> {
   final email = TextEditingController();
   final password = TextEditingController();
-  final title = TextEditingController();
-  final description = TextEditingController();
-  final duration = TextEditingController(text: '05:00');
   final quoteEnglish = TextEditingController();
   final quoteHindi = TextEditingController();
   final authorEnglish = TextEditingController(text: 'Sadguru Maharaj');
   final authorHindi = TextEditingController(text: 'सद्गुरु महाराज');
 
-  SatsangSession session = SatsangSession.morning;
-  PlatformFile? pickedFile;
   bool busy = false;
   String status = '';
 
@@ -5663,9 +5602,6 @@ class _AdminConsoleState extends State<AdminConsole> {
   void dispose() {
     email.dispose();
     password.dispose();
-    title.dispose();
-    description.dispose();
-    duration.dispose();
     quoteEnglish.dispose();
     quoteHindi.dispose();
     authorEnglish.dispose();
@@ -5696,54 +5632,6 @@ class _AdminConsoleState extends State<AdminConsole> {
           ));
     } on FirebaseAuthException catch (error) {
       setState(() => status = error.message ?? 'Sign in failed.');
-    } finally {
-      setState(() => busy = false);
-    }
-  }
-
-  Future<void> _pickAudio() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav', 'mp4'],
-      withData: true,
-    );
-    if (result != null && result.files.isNotEmpty) {
-      setState(() => pickedFile = result.files.first);
-    }
-  }
-
-  Future<void> _uploadAudio() async {
-    if (pickedFile == null || title.text.trim().isEmpty) {
-      setState(() => status = appText(
-            context,
-            'Choose audio and enter a title.',
-            'ऑडियो चुनें और शीर्षक दर्ज करें।',
-          ));
-      return;
-    }
-
-    setState(() => busy = true);
-    try {
-      await widget.content.uploadSatsang(
-        file: pickedFile!,
-        session: session,
-        title: title.text.trim(),
-        description: description.text.trim(),
-        durationLabel:
-            duration.text.trim().isEmpty ? '00:00' : duration.text.trim(),
-      );
-      title.clear();
-      description.clear();
-      setState(() {
-        pickedFile = null;
-        status = appText(
-          context,
-          'Satsang uploaded.',
-          'सत्संग अपलोड हो गया।',
-        );
-      });
-    } catch (error) {
-      setState(() => status = error.toString());
     } finally {
       setState(() => busy = false);
     }
@@ -5944,8 +5832,8 @@ class _AdminConsoleState extends State<AdminConsole> {
                     title: appText(context, 'Admin Sign In', 'एडमिन साइन इन'),
                     subtitle: appText(
                       context,
-                      'Upload satsang audio and publish Sadguru quotes.',
-                      'सत्संग ऑडियो अपलोड करें और सद्गुरु वचन प्रकाशित करें।',
+                      'Publish and manage Sadguru quotes in English and Hindi.',
+                      'सद्गुरु वचन अंग्रेजी और हिंदी में प्रकाशित और प्रबंधित करें।',
                     ),
                   ),
                   _AdminCard(
@@ -6014,7 +5902,7 @@ class _AdminConsoleState extends State<AdminConsole> {
                 }
 
                 return _PageScaffold(
-                  maxWidth: 1100,
+                  maxWidth: 820,
                   children: [
                     _ScreenTitle(
                       icon: Icons.dashboard_customize_rounded,
@@ -6025,32 +5913,7 @@ class _AdminConsoleState extends State<AdminConsole> {
                         '${user.email} से साइन इन',
                       ),
                     ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final narrow = constraints.maxWidth < 760;
-                        final panels = [
-                          _AdminCard(children: _audioForm()),
-                          _AdminCard(children: _quoteForm()),
-                        ];
-                        return narrow
-                            ? Column(
-                                children: panels
-                                    .map((item) => Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 16),
-                                        child: item))
-                                    .toList())
-                            : Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: panels[0]),
-                                  const SizedBox(width: 16),
-                                  Expanded(child: panels[1]),
-                                ],
-                              );
-                      },
-                    ),
-                    const SizedBox(height: 2),
+                    _AdminCard(children: _quoteForm()),
                     _quoteManager(),
                     if (status.isNotEmpty) _StatusText(status),
                   ],
@@ -6061,68 +5924,6 @@ class _AdminConsoleState extends State<AdminConsole> {
         ),
       ),
     );
-  }
-
-  List<Widget> _audioForm() {
-    return [
-      Text(
-        appText(context, 'Upload satsang', 'सत्संग अपलोड करें'),
-        style: Theme.of(context).textTheme.titleLarge,
-      ),
-      const SizedBox(height: 14),
-      SegmentedButton<SatsangSession>(
-        segments: [
-          ButtonSegment(
-              value: SatsangSession.morning,
-              label: Text(appText(context, 'Morning', 'प्रातः')),
-              icon: const Icon(Icons.wb_sunny_rounded)),
-          ButtonSegment(
-              value: SatsangSession.evening,
-              label: Text(appText(context, 'Evening', 'शाम')),
-              icon: const Icon(Icons.nights_stay_rounded)),
-          ButtonSegment(
-              value: SatsangSession.aarti,
-              label: Text(appText(context, 'Aarti', 'आरती')),
-              icon: const Icon(Icons.local_fire_department_rounded)),
-        ],
-        selected: {session},
-        onSelectionChanged: (value) => setState(() => session = value.first),
-      ),
-      const SizedBox(height: 12),
-      TextField(
-        controller: title,
-        decoration: _inputDecoration(appText(context, 'Title', 'शीर्षक')),
-      ),
-      const SizedBox(height: 12),
-      TextField(
-          controller: description,
-          decoration:
-              _inputDecoration(appText(context, 'Description', 'विवरण')),
-          minLines: 3,
-          maxLines: 5),
-      const SizedBox(height: 12),
-      TextField(
-          controller: duration,
-          decoration: _inputDecoration(appText(
-            context,
-            'Duration label, e.g. 12:30',
-            'समय लेबल, जैसे 12:30',
-          ))),
-      const SizedBox(height: 12),
-      OutlinedButton.icon(
-        onPressed: busy ? null : _pickAudio,
-        icon: const Icon(Icons.audio_file_rounded),
-        label: Text(pickedFile == null
-            ? appText(context, 'Choose audio', 'ऑडियो चुनें')
-            : pickedFile!.name),
-      ),
-      const SizedBox(height: 16),
-      FilledButton.icon(
-        onPressed: busy ? null : _uploadAudio,
-        icon: const Icon(Icons.cloud_upload_rounded),
-        label: Text(appText(context, 'Upload satsang', 'सत्संग अपलोड करें')),
-      ),
-    ];
   }
 
   List<Widget> _quoteForm() {
@@ -7188,13 +6989,4 @@ bool _shouldFallbackToRedirect(String code) {
       code == 'cancelled-popup-request' ||
       code == 'web-context-cancelled' ||
       code == 'internal-error';
-}
-
-String _audioContentType(String fileName) {
-  final lower = fileName.toLowerCase();
-  if (lower.endsWith('.m4a')) return 'audio/mp4';
-  if (lower.endsWith('.aac')) return 'audio/aac';
-  if (lower.endsWith('.wav')) return 'audio/wav';
-  if (lower.endsWith('.mp4')) return 'audio/mp4';
-  return 'audio/mpeg';
 }

@@ -9,22 +9,21 @@ Guruvandan is a Flutter app for a spiritual school where devotees can follow a s
   completion chime after the timed session
 - Daily Sadguru Maharaj quotes
 - Local streak tracking for routine consistency
-- Firebase-ready admin console for uploading satsang audio and adding quotes
+- Firebase-backed admin console for bilingual Sadguru quotes
 
 ## Tech Stack
 
 - Flutter and Dart for Android, iOS, and web
 - Firebase Auth for admin login
-- Firebase Realtime Database for satsang metadata and quotes
-- Firebase Storage for uploaded satsang audio
-- `audioplayers` for satsang and meditation audio
+- Firebase Realtime Database for bilingual quotes and user profiles
+- `just_audio` and `audio_service` for foreground and background audio
 - `shared_preferences` for local streak tracking
 
 ## Bundled Audio
 
-- Morning fallback satsang: `assets/audio/morning_satsang_astuti_rishikesh.mp3`
-- Shaam satsang fallback: `assets/audio/shaam_satsang_full.mp3`
-- Aarti fallback: `assets/audio/shaam_aarti.mp3`
+- Morning satsang: `assets/audio/morning_satsang_astuti_rishikesh.mp3`
+- Shaam satsang: `assets/audio/shaam_satsang_full.mp3`
+- Aarti: `assets/audio/shaam_aarti.mp3`
 - Meditation completion chime: `assets/audio/meditation_chant.mp3`
 
 ## Local Preview
@@ -65,7 +64,6 @@ The project currently uses Firebase project values discovered from the Android r
 
 - project id: `guru-vandan`
 - realtime database: `https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/`
-- storage bucket: `guru-vandan.firebasestorage.app`
 
 Before production, create proper Firebase web and iOS apps in the same Firebase project and replace placeholder values in `lib/main.dart`.
 
