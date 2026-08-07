@@ -35,10 +35,10 @@ void main() {
         const GuruvandanApp(firebaseReady: false, showOpening: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('Choose your language'), findsOneWidget);
-    expect(find.text('अपनी भाषा चुनें'), findsOneWidget);
+    expect(find.text('Choose the language of your journey'), findsOneWidget);
+    expect(find.text('अपने साधना-पथ की भाषा चुनें'), findsOneWidget);
     expect(find.text('Continue in English'), findsOneWidget);
-    expect(find.text('हिंदी में आगे बढ़ें'), findsOneWidget);
+    expect(find.text('हिन्दी में प्रवेश करें'), findsOneWidget);
     expect(find.text('Welcome to Guruvandan'), findsNothing);
 
     await tester.tap(find.text('Continue in English'));
@@ -48,7 +48,7 @@ void main() {
     expect(find.text('First name'), findsOneWidget);
     expect(find.text('Middle name'), findsOneWidget);
     expect(find.text('Last name'), findsOneWidget);
-    expect(find.text('Today\'s Routine'), findsNothing);
+    expect(find.text('Today\'s Sacred Practice'), findsNothing);
   });
 
   test('Firebase quote records retain English and Hindi versions', () {
@@ -81,7 +81,7 @@ void main() {
     expect(find.text('Jai Guru, Ajay!'), findsOneWidget);
     expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Bhatnagar'), findsNothing);
-    expect(find.text('Today\'s Routine'), findsOneWidget);
+    expect(find.text('Today\'s Sacred Practice'), findsOneWidget);
   });
 
   testWidgets('Streak counts meditation days only', (tester) async {
@@ -121,8 +121,12 @@ void main() {
     expect(current.data, '2');
     expect(best.data, '2');
     expect(total.data, '3');
-    expect(find.text('Meditation streak'), findsOneWidget);
-    expect(find.text('Any meditation duration counts.'), findsOneWidget);
+    expect(find.text('Continuity of meditation'), findsOneWidget);
+    expect(
+      find.text(
+          'Every sincere meditation, of any duration, keeps the continuity.'),
+      findsOneWidget,
+    );
     expect(
       find.text('Complete all three practices to grow your streak.'),
       findsNothing,
@@ -141,15 +145,15 @@ void main() {
     await tester.enterText(find.byType(EditableText).at(0), 'Ajay');
     await tester.enterText(find.byType(EditableText).at(1), 'Kumar');
     await tester.enterText(find.byType(EditableText).at(2), 'Bhatnagar');
-    await tester.ensureVisible(find.text('Begin'));
-    await tester.tap(find.text('Begin'));
+    await tester.ensureVisible(find.text('Begin the journey'));
+    await tester.tap(find.text('Begin the journey'));
     await tester.pumpAndSettle();
 
     expect(find.text('Jai Guru, Ajay!'), findsOneWidget);
     expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Kumar'), findsNothing);
     expect(find.textContaining('Bhatnagar'), findsNothing);
-    expect(find.text('Today\'s Routine'), findsOneWidget);
+    expect(find.text('Today\'s Sacred Practice'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -159,7 +163,7 @@ void main() {
 
     expect(find.text('Welcome to Guruvandan'), findsNothing);
     expect(find.text('First name'), findsNothing);
-    expect(find.text('Today\'s Routine'), findsOneWidget);
+    expect(find.text('Today\'s Sacred Practice'), findsOneWidget);
   });
 
   testWidgets('Home hero morning chip opens morning satsang', (tester) async {
@@ -169,9 +173,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-        find.text(
-            'Morning, evening, and aarti audio for steady daily devotion.'),
-        findsOneWidget);
+      find.text(
+          'Sacred morning, evening, and aarti listening for a steadfast life of devotion.'),
+      findsOneWidget,
+    );
     expect(find.text('Morning Satsang'), findsOneWidget);
   });
 
@@ -182,38 +187,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-        find.text(
-            'Morning, evening, and aarti audio for steady daily devotion.'),
-        findsOneWidget);
-    expect(find.text('Shaam Satsang'), findsOneWidget);
+      find.text(
+          'Sacred morning, evening, and aarti listening for a steadfast life of devotion.'),
+      findsOneWidget,
+    );
+    expect(find.text('Evening Satsang'), findsOneWidget);
   });
 
-  testWidgets('Home hero dhyan chip opens meditation', (tester) async {
+  testWidgets('Home hero meditation chip opens meditation', (tester) async {
     await pumpSavedHome(tester);
 
-    await tester.tap(find.text('Dhyan'));
+    await tester.tap(find.text('Meditation').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Meditation'), findsOneWidget);
+    expect(find.text('Meditation'), findsWidgets);
     expect(
-        find.text(
-            'Set your duration. The chime plays only when the timer ends.'),
-        findsOneWidget);
+      find.text(
+          'Choose a duration and enter stillness. The sacred closing chant sounds only when meditation ends.'),
+      findsOneWidget,
+    );
     expect(find.text('Om mantra'), findsOneWidget);
-    expect(find.text('417Hz mantra ambience'), findsOneWidget);
+    expect(find.text('417Hz sacred mantra sound'), findsOneWidget);
   });
 
   testWidgets('More tab shows coming soon modules', (tester) async {
     await pumpSavedHome(tester);
 
-    await tester.tap(find.text('More'));
+    await tester.tap(find.text('Other'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Modules'), findsOneWidget);
-    expect(find.text('Shop'), findsOneWidget);
-    expect(find.text('Events'), findsOneWidget);
+    expect(find.text('Sacred offerings'), findsOneWidget);
+    expect(find.text('Devotional Store'), findsOneWidget);
+    expect(find.text('Spiritual Gatherings'), findsOneWidget);
     expect(find.text('Guru Gallery'), findsOneWidget);
-    expect(find.text('Jigyasa'), findsOneWidget);
+    expect(find.text('Questions & Guidance'), findsOneWidget);
     expect(find.text('Coming soon'), findsNWidgets(4));
     expect(find.text('Admin content'), findsNothing);
     expect(find.text('Open admin console'), findsNothing);
@@ -222,7 +229,7 @@ void main() {
   testWidgets('More tab switches app language to Hindi', (tester) async {
     await pumpSavedHome(tester);
 
-    await tester.tap(find.text('More'));
+    await tester.tap(find.text('Other'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Hindi'));
     await tester.pumpAndSettle();
@@ -230,9 +237,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('भाषा'), findsOneWidget);
-    expect(find.text('मॉड्यूल'), findsOneWidget);
-    expect(find.text('दुकान'), findsOneWidget);
-    expect(find.text('होम'), findsOneWidget);
+    expect(find.text('आगामी अनुभाग'), findsOneWidget);
+    expect(find.text('पूजन सामग्री'), findsOneWidget);
+    expect(find.text('गृह'), findsOneWidget);
+    expect(find.text('Other'), findsNothing);
+    expect(find.text('Sacred offerings'), findsNothing);
   });
 
   testWidgets('Meditation start asks user to put phone on silent',
@@ -242,14 +251,14 @@ void main() {
 
     await pumpSavedHome(tester);
 
-    await tester.tap(find.text('Dhyan'));
+    await tester.tap(find.text('Meditation').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start'));
+    await tester.tap(find.text('Begin meditation'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Put phone on silent'), findsOneWidget);
+    expect(find.text('Prepare for sacred listening'), findsOneWidget);
     expect(
-      find.textContaining('Please put your phone on silent mode'),
+      find.textContaining('Please silence your phone'),
       findsOneWidget,
     );
   });

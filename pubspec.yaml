@@ -1,13 +1,15 @@
 name: guruvandan_flutter
 description: A spiritual routine tracker for satsang, meditation, Sadguru quotes, and admin-managed devotional content.
 publish_to: "none"
-version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   audio_session: ^0.2.4
   cupertino_icons: ^1.0.8
