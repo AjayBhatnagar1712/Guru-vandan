@@ -1,0 +1,5 @@
+package com.ivar.guruvandan
+
+import com.ryanheise.audioservice.AudioServiceActivity
+
+class MainActivity : AudioServiceActivity()

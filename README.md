@@ -103,11 +103,14 @@ If Google sign-in opens briefly and returns without signing in, check these firs
 
 ## Admin Console
 
-Open the app and go to:
+Open the private admin route directly:
 
 ```text
-More -> Open admin console
+https://ajaybhatnagar1712.github.io/Guru-vandan/#/admin
 ```
+
+The quote manager stores English and Hindi together, lists the newest entries
+first, and allows existing quotes to be edited from the same page.
 
 Allowed admin email is currently:
 

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:audioplayers/audioplayers.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -13,17 +13,24 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:just_audio/just_audio.dart' as ja;
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const allowedAdminEmail = 'ajaybhatnagar1712@gmail.com';
 
-const firebaseOptions = FirebaseOptions(
+const _firebaseApiKey = String.fromEnvironment(
+  'FIREBASE_API_KEY',
+  defaultValue: 'AIzaSyBDnC1IE0BImeYue5vaOicS4_Miw0Vd2xE',
+);
+
+const _firebaseWebOptions = FirebaseOptions(
   apiKey: String.fromEnvironment(
     'FIREBASE_API_KEY',
     defaultValue: 'AIzaSyBDnC1IE0BImeYue5vaOicS4_Miw0Vd2xE',
   ),
   appId: String.fromEnvironment(
-    'FIREBASE_APP_ID',
+    'FIREBASE_WEB_APP_ID',
     defaultValue: '1:540841544767:web:guruvandan-flutter',
   ),
   messagingSenderId: '540841544767',
@@ -34,9 +41,31 @@ const firebaseOptions = FirebaseOptions(
   storageBucket: 'guru-vandan.firebasestorage.app',
 );
 
+const _firebaseAndroidOptions = FirebaseOptions(
+  apiKey: _firebaseApiKey,
+  appId: String.fromEnvironment(
+    'FIREBASE_ANDROID_APP_ID',
+    defaultValue: '1:540841544767:android:6f5d1b40aba4f0c3cebc8a',
+  ),
+  messagingSenderId: '540841544767',
+  projectId: 'guru-vandan',
+  databaseURL:
+      'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/',
+  storageBucket: 'guru-vandan.firebasestorage.app',
+);
+
+FirebaseOptions get firebaseOptions {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return _firebaseAndroidOptions;
+  }
+  return _firebaseWebOptions;
+}
+
+ja.AudioPlayer? _backgroundAudioPlayer;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _configureLongFormAudio();
+  await _configureBackgroundAudio();
   var firebaseReady = false;
 
   try {
@@ -52,23 +81,30 @@ Future<void> main() async {
   runApp(GuruvandanApp(firebaseReady: firebaseReady));
 }
 
-Future<void> _configureLongFormAudio() async {
+Future<void> _configureBackgroundAudio() async {
   try {
-    await AudioPlayer.global.setAudioContext(_longFormAudioContext());
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.ivar.guruvandan.audio',
+      androidNotificationChannelName: 'Guruvandan playback',
+      androidNotificationChannelDescription:
+          'Satsang, meditation, and Om mantra playback controls',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: false,
+    );
+
+    _backgroundAudioPlayer = ja.AudioPlayer(
+      handleInterruptions: true,
+      handleAudioSessionActivation: true,
+    );
+
+    final session = await AudioSession.instance;
+    await session.configure(AudioSessionConfiguration.music());
   } catch (_) {
-    // Web and some test platforms do not expose native audio-session controls.
+    _backgroundAudioPlayer ??= ja.AudioPlayer();
   }
 }
 
-AudioContext _longFormAudioContext() {
-  return AudioContextConfig(
-    focus: AudioContextConfigFocus.gain,
-    respectSilence: false,
-    stayAwake: true,
-  ).build();
-}
-
-class GuruvandanApp extends StatelessWidget {
+class GuruvandanApp extends StatefulWidget {
   const GuruvandanApp({
     required this.firebaseReady,
     this.showOpening = true,
@@ -78,84 +114,141 @@ class GuruvandanApp extends StatelessWidget {
   final bool firebaseReady;
   final bool showOpening;
 
+  static const languageKey = 'guruvandan_flutter:language';
+
+  @override
+  State<GuruvandanApp> createState() => _GuruvandanAppState();
+}
+
+class _GuruvandanAppState extends State<GuruvandanApp> {
+  AppLanguage? language;
+  bool languageLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLanguage();
+  }
+
+  Future<void> _loadLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedValue = prefs.getString(GuruvandanApp.languageKey);
+    final saved =
+        savedValue == null ? null : AppLanguagePreference.fromValue(savedValue);
+    if (mounted) {
+      setState(() {
+        language = saved;
+        languageLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _setLanguage(AppLanguage value) async {
+    if (language != value) setState(() => language = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(GuruvandanApp.languageKey, value.name);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final textTheme = GoogleFonts.interTextTheme();
+    final activeLanguage = language ?? AppLanguage.english;
+    final textTheme = activeLanguage == AppLanguage.hindi
+        ? GoogleFonts.notoSansDevanagariTextTheme()
+        : GoogleFonts.interTextTheme();
 
-    return MaterialApp(
-      title: 'Guruvandan',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.maroon,
-          primary: AppColors.maroon,
-          secondary: AppColors.gold,
-          surface: AppColors.surface,
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: AppColors.cream,
-        appBarTheme: AppBarTheme(
-          backgroundColor: AppColors.cream,
-          foregroundColor: AppColors.ink,
-          centerTitle: false,
-          elevation: 0,
-          titleTextStyle: GoogleFonts.lora(
-            color: AppColors.ink,
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
+    return LanguageScope(
+      language: activeLanguage,
+      onChanged: _setLanguage,
+      child: MaterialApp(
+        title: 'Guruvandan',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: AppColors.maroon,
+            primary: AppColors.maroon,
+            secondary: AppColors.gold,
+            surface: AppColors.surface,
+            brightness: Brightness.light,
+          ),
+          scaffoldBackgroundColor: AppColors.cream,
+          appBarTheme: AppBarTheme(
+            backgroundColor: AppColors.cream,
+            foregroundColor: AppColors.ink,
+            centerTitle: false,
+            elevation: 0,
+            titleTextStyle: _headingStyle(
+              activeLanguage,
+              color: AppColors.ink,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(56, 56),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              textStyle: _bodyStyle(
+                activeLanguage,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(56, 54),
+              side: const BorderSide(color: AppColors.borderStrong),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              textStyle: _bodyStyle(
+                activeLanguage,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          textTheme: textTheme.copyWith(
+            displayLarge: _headingStyle(
+              activeLanguage,
+              fontSize: 40,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+              height: 1.04,
+            ),
+            headlineMedium: _headingStyle(
+              activeLanguage,
+              fontSize: 27,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+              height: 1.12,
+            ),
+            titleLarge: _bodyStyle(
+              activeLanguage,
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+            bodyLarge: _bodyStyle(
+              activeLanguage,
+              fontSize: 18,
+              height: 1.42,
+              color: AppColors.taupe,
+            ),
           ),
         ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(56, 56),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            textStyle:
-                GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(56, 54),
-            side: const BorderSide(color: AppColors.borderStrong),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            textStyle:
-                GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
-        ),
-        textTheme: textTheme.copyWith(
-          displayLarge: GoogleFonts.lora(
-            fontSize: 40,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-            height: 1.04,
-          ),
-          headlineMedium: GoogleFonts.lora(
-            fontSize: 27,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-            height: 1.12,
-          ),
-          titleLarge: GoogleFonts.inter(
-            fontSize: 21,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-          ),
-          bodyLarge: GoogleFonts.inter(
-            fontSize: 18,
-            height: 1.42,
-            color: AppColors.taupe,
-          ),
-        ),
+        home: !languageLoaded
+            ? const _LanguageLoadingScreen()
+            : language == null
+                ? _FirstLaunchLanguageScreen(onSelected: _setLanguage)
+                : widget.showOpening
+                    ? SpiritualOpening(firebaseReady: widget.firebaseReady)
+                    : AuthGate(firebaseReady: widget.firebaseReady),
+        routes: {
+          '/admin': (_) => _AdminRoute(firebaseReady: widget.firebaseReady),
+        },
       ),
-      home: showOpening
-          ? SpiritualOpening(firebaseReady: firebaseReady)
-          : AuthGate(firebaseReady: firebaseReady),
-      routes: {
-        '/admin': (_) => _AdminRoute(firebaseReady: firebaseReady),
-      },
     );
   }
 }
@@ -189,6 +282,317 @@ enum RoutineTask { morningSatsang, eveningSatsang, meditation }
 
 enum MeditationChantPhase { closing }
 
+enum AppLanguage { english, hindi }
+
+enum BackgroundPlaybackKind { none, satsang, mantra, meditation, closingChant }
+
+class AppLanguagePreference {
+  static AppLanguage fromValue(String? value) {
+    return value == AppLanguage.hindi.name
+        ? AppLanguage.hindi
+        : AppLanguage.english;
+  }
+}
+
+class _LanguageLoadingScreen extends StatelessWidget {
+  const _LanguageLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(child: _SacredBackground()),
+          Center(
+            child: CircularProgressIndicator(
+              color: AppColors.maroon,
+              backgroundColor: AppColors.rose,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FirstLaunchLanguageScreen extends StatelessWidget {
+  const _FirstLaunchLanguageScreen({required this.onSelected});
+
+  final ValueChanged<AppLanguage> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(child: _SacredBackground()),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 126,
+                          height: 126,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.borderStrong),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.deepCrimson
+                                    .withValues(alpha: 0.12),
+                                blurRadius: 28,
+                                offset: const Offset(0, 14),
+                              ),
+                            ],
+                          ),
+                          child: Image.asset(
+                            'assets/images/app_icon.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Text(
+                        'Choose your language',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.lora(
+                          color: AppColors.ink,
+                          fontSize: 31,
+                          fontWeight: FontWeight.w800,
+                          height: 1.12,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'अपनी भाषा चुनें',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSerifDevanagari(
+                          color: AppColors.maroon,
+                          fontSize: 27,
+                          fontWeight: FontWeight.w800,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'You can change this later from More.\nआप इसे बाद में More से बदल सकते हैं।',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSansDevanagari(
+                          color: AppColors.taupe,
+                          fontSize: 16,
+                          height: 1.55,
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      _LanguageChoiceButton(
+                        iconText: 'A',
+                        title: 'Continue in English',
+                        subtitle: 'English',
+                        onTap: () => onSelected(AppLanguage.english),
+                      ),
+                      const SizedBox(height: 14),
+                      _LanguageChoiceButton(
+                        iconText: 'अ',
+                        title: 'हिंदी में आगे बढ़ें',
+                        subtitle: 'Hindi',
+                        hindi: true,
+                        onTap: () => onSelected(AppLanguage.hindi),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageChoiceButton extends StatelessWidget {
+  const _LanguageChoiceButton({
+    required this.iconText,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.hindi = false,
+  });
+
+  final String iconText;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool hindi;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleStyle = hindi
+        ? GoogleFonts.notoSansDevanagari(
+            color: AppColors.ink,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          )
+        : GoogleFonts.inter(
+            color: AppColors.ink,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          );
+
+    return Material(
+      color: AppColors.offWhite,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppColors.borderStrong),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 78),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.rose,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    iconText,
+                    style: hindi
+                        ? GoogleFonts.notoSerifDevanagari(
+                            color: AppColors.maroon,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          )
+                        : GoogleFonts.lora(
+                            color: AppColors.maroon,
+                            fontSize: 23,
+                            fontWeight: FontWeight.w900,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: titleStyle),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          color: AppColors.muted,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: AppColors.maroon,
+                  size: 26,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LanguageScope extends InheritedWidget {
+  const LanguageScope({
+    required this.language,
+    required this.onChanged,
+    required super.child,
+    super.key,
+  });
+
+  final AppLanguage language;
+  final ValueChanged<AppLanguage> onChanged;
+
+  static LanguageScope of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<LanguageScope>();
+    assert(scope != null, 'LanguageScope was not found in the widget tree.');
+    return scope!;
+  }
+
+  @override
+  bool updateShouldNotify(LanguageScope oldWidget) {
+    return language != oldWidget.language || onChanged != oldWidget.onChanged;
+  }
+}
+
+String appText(BuildContext context, String english, String hindi) {
+  return LanguageScope.of(context).language == AppLanguage.hindi
+      ? hindi
+      : english;
+}
+
+TextStyle _headingStyle(
+  AppLanguage language, {
+  Color? color,
+  double? fontSize,
+  FontWeight? fontWeight,
+  double? height,
+}) {
+  if (language == AppLanguage.hindi) {
+    return GoogleFonts.notoSerifDevanagari(
+      color: color,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      height: height,
+    );
+  }
+  return GoogleFonts.lora(
+    color: color,
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    height: height,
+  );
+}
+
+TextStyle _bodyStyle(
+  AppLanguage language, {
+  Color? color,
+  double? fontSize,
+  FontWeight? fontWeight,
+  double? height,
+}) {
+  if (language == AppLanguage.hindi) {
+    return GoogleFonts.notoSansDevanagari(
+      color: color,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      height: height,
+    );
+  }
+  return GoogleFonts.inter(
+    color: color,
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    height: height,
+  );
+}
+
 class DevoteeProfile {
   const DevoteeProfile({
     required this.firstName,
@@ -214,6 +618,15 @@ class DevoteeProfile {
         'lastName': lastName,
       };
 
+  static DevoteeProfile? fromMap(Object? value) {
+    if (value is! Map) return null;
+    return fromParts(
+      firstName: value['firstName']?.toString() ?? '',
+      middleName: value['middleName']?.toString() ?? '',
+      lastName: value['lastName']?.toString() ?? '',
+    );
+  }
+
   static DevoteeProfile? fromParts({
     required String firstName,
     required String middleName,
@@ -236,13 +649,8 @@ class DevoteeProfile {
     if (clean.startsWith('{')) {
       try {
         final decoded = jsonDecode(clean);
-        if (decoded is Map) {
-          return fromParts(
-            firstName: decoded['firstName']?.toString() ?? '',
-            middleName: decoded['middleName']?.toString() ?? '',
-            lastName: decoded['lastName']?.toString() ?? '',
-          );
-        }
+        final profile = fromMap(decoded);
+        if (profile != null) return profile;
       } catch (_) {
         return null;
       }
@@ -320,22 +728,29 @@ class WisdomQuote {
   const WisdomQuote({
     required this.id,
     required this.text,
+    this.textHindi = '',
     this.author = 'Sadguru Maharaj',
+    this.authorHindi = 'सद्गुरु महाराज',
     this.active = true,
     this.createdAt,
   });
 
   final String id;
   final String text;
+  final String textHindi;
   final String author;
+  final String authorHindi;
   final bool active;
   final int? createdAt;
 
   factory WisdomQuote.fromEntry(String id, Map<dynamic, dynamic> value) {
     return WisdomQuote(
       id: id,
-      text: (value['text'] ?? '').toString(),
-      author: (value['author'] ?? 'Sadguru Maharaj').toString(),
+      text: (value['textEnglish'] ?? value['text'] ?? '').toString(),
+      textHindi: (value['textHindi'] ?? '').toString(),
+      author: (value['authorEnglish'] ?? value['author'] ?? 'Sadguru Maharaj')
+          .toString(),
+      authorHindi: (value['authorHindi'] ?? 'सद्गुरु महाराज').toString(),
       active: value['active'] != false,
       createdAt: value['createdAt'] is int ? value['createdAt'] as int : null,
     );
@@ -400,6 +815,114 @@ const fallbackQuotes = [
   ),
 ];
 
+SatsangTrack localizedSatsangTrack(
+  BuildContext context,
+  SatsangTrack track,
+) {
+  if (LanguageScope.of(context).language != AppLanguage.hindi) return track;
+
+  switch (track.id) {
+    case 'local-morning':
+      return SatsangTrack(
+        id: track.id,
+        session: track.session,
+        title: 'प्रातः सत्संग',
+        description: 'ऋषिकेश की स्तुति के साथ दिन की शुरुआत करें।',
+        durationLabel: track.durationLabel,
+        assetPath: track.assetPath,
+        audioUrl: track.audioUrl,
+        active: track.active,
+        createdAt: track.createdAt,
+      );
+    case 'local-evening':
+      return SatsangTrack(
+        id: track.id,
+        session: track.session,
+        title: 'शाम सत्संग',
+        description: 'पूर्ण संध्या सत्संग के साथ दिन को शांत करें।',
+        durationLabel: track.durationLabel,
+        assetPath: track.assetPath,
+        audioUrl: track.audioUrl,
+        active: track.active,
+        createdAt: track.createdAt,
+      );
+    case 'local-aarti':
+      return SatsangTrack(
+        id: track.id,
+        session: track.session,
+        title: 'शाम आरती',
+        description: 'भक्ति और कृतज्ञता के लिए संध्या आरती।',
+        durationLabel: track.durationLabel,
+        assetPath: track.assetPath,
+        audioUrl: track.audioUrl,
+        active: track.active,
+        createdAt: track.createdAt,
+      );
+    default:
+      return track;
+  }
+}
+
+WisdomQuote localizedWisdomQuote(
+  BuildContext context,
+  WisdomQuote quote,
+) {
+  if (LanguageScope.of(context).language != AppLanguage.hindi) return quote;
+
+  if (quote.textHindi.trim().isNotEmpty) {
+    return WisdomQuote(
+      id: quote.id,
+      text: quote.textHindi,
+      textHindi: quote.textHindi,
+      author: quote.authorHindi.trim().isEmpty
+          ? 'सद्गुरु महाराज'
+          : quote.authorHindi,
+      authorHindi: quote.authorHindi,
+      active: quote.active,
+      createdAt: quote.createdAt,
+    );
+  }
+
+  switch (quote.id) {
+    case 'quote-1':
+      return WisdomQuote(
+        id: quote.id,
+        text: 'सरल हृदय से गुरु का स्मरण करें, और हर कदम पूजा बन जाता है।',
+        author: 'सद्गुरु महाराज',
+        active: quote.active,
+        createdAt: quote.createdAt,
+      );
+    case 'quote-2':
+      return WisdomQuote(
+        id: quote.id,
+        text: 'दिन की शुरुआत और अंत सत्संग से हो तो मन कोमल हो जाता है।',
+        author: 'सद्गुरु महाराज',
+        active: quote.active,
+        createdAt: quote.createdAt,
+      );
+    case 'quote-3':
+      return WisdomQuote(
+        id: quote.id,
+        text:
+            'ध्यान जीवन से दूरी नहीं है। यह जीवन के भीतर प्रकाश की ओर लौटना है।',
+        author: 'सद्गुरु महाराज',
+        active: quote.active,
+        createdAt: quote.createdAt,
+      );
+    default:
+      if (quote.author == 'Sadguru Maharaj') {
+        return WisdomQuote(
+          id: quote.id,
+          text: quote.text,
+          author: 'सद्गुरु महाराज',
+          active: quote.active,
+          createdAt: quote.createdAt,
+        );
+      }
+      return quote;
+  }
+}
+
 class FirebaseContentService {
   FirebaseContentService(this.ready);
 
@@ -449,6 +972,29 @@ class FirebaseContentService {
     }).handleError((_) => fallbackQuotes);
   }
 
+  Stream<List<WisdomQuote>> adminQuotes() {
+    if (!ready) return Stream.value(const []);
+
+    return FirebaseDatabase.instance.ref('quotes').onValue.map((event) {
+      final value = event.snapshot.value;
+      if (value is! Map) return <WisdomQuote>[];
+
+      final items = value.entries
+          .map((entry) {
+            if (entry.value is! Map) return null;
+            return WisdomQuote.fromEntry(entry.key.toString(),
+                Map<dynamic, dynamic>.from(entry.value as Map));
+          })
+          .whereType<WisdomQuote>()
+          .where((item) =>
+              item.text.trim().isNotEmpty || item.textHindi.trim().isNotEmpty)
+          .toList()
+        ..sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
+
+      return items;
+    });
+  }
+
   Future<void> uploadSatsang({
     required PlatformFile file,
     required SatsangSession session,
@@ -485,16 +1031,45 @@ class FirebaseContentService {
     });
   }
 
-  Future<void> publishQuote(String text, String author) async {
+  Future<void> publishQuote({
+    required String textEnglish,
+    required String textHindi,
+    required String authorEnglish,
+    required String authorHindi,
+  }) async {
     if (!ready) throw StateError('Firebase is not configured.');
     final key = FirebaseDatabase.instance.ref('quotes').push().key;
     if (key == null) throw StateError('Could not create a quote record.');
     await FirebaseDatabase.instance.ref('quotes/$key').set({
-      'text': text,
-      'author': author,
+      'text': textEnglish,
+      'textEnglish': textEnglish,
+      'textHindi': textHindi,
+      'author': authorEnglish,
+      'authorEnglish': authorEnglish,
+      'authorHindi': authorHindi,
       'active': true,
       'createdAt': ServerValue.timestamp,
       'createdBy': FirebaseAuth.instance.currentUser?.email,
+    });
+  }
+
+  Future<void> updateQuote({
+    required String id,
+    required String textEnglish,
+    required String textHindi,
+    required String authorEnglish,
+    required String authorHindi,
+  }) async {
+    if (!ready) throw StateError('Firebase is not configured.');
+    await FirebaseDatabase.instance.ref('quotes/$id').update({
+      'text': textEnglish,
+      'textEnglish': textEnglish,
+      'textHindi': textHindi,
+      'author': authorEnglish,
+      'authorEnglish': authorEnglish,
+      'authorHindi': authorHindi,
+      'updatedAt': ServerValue.timestamp,
+      'updatedBy': FirebaseAuth.instance.currentUser?.email,
     });
   }
 
@@ -627,9 +1202,14 @@ class _OpeningScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                'Smaran. Satsang. Dhyan.',
+                                appText(
+                                  context,
+                                  'Smaran. Satsang. Dhyan.',
+                                  'स्मरण. सत्संग. ध्यान.',
+                                ),
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
+                                style: _bodyStyle(
+                                  LanguageScope.of(context).language,
                                   color: AppColors.taupe,
                                   fontSize: 18,
                                   height: 1.35,
@@ -786,13 +1366,19 @@ class _AuthGateState extends State<AuthGate> {
   Future<String?> _prepareAuthStartup() async {
     if (!widget.firebaseReady || !kIsWeb) return null;
 
+    final googleCouldNotComplete = appText(
+      context,
+      'Google sign-in could not be completed. Please try again.',
+      'Google साइन-इन पूरा नहीं हो सका। कृपया फिर कोशिश करें।',
+    );
+
     try {
       await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
       await FirebaseAuth.instance.getRedirectResult();
     } on FirebaseAuthException catch (error) {
       return _friendlyAuthMessage(error, 'Google sign-in failed.');
     } catch (_) {
-      return 'Google sign-in could not be completed. Please try again.';
+      return googleCouldNotComplete;
     }
 
     return null;
@@ -897,6 +1483,12 @@ class _SignInScreenState extends State<_SignInScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    final googleCouldNotComplete = appText(
+      context,
+      'Google sign-in could not be completed.',
+      'Google साइन-इन पूरा नहीं हो सका।',
+    );
+
     setState(() {
       busy = true;
       status = null;
@@ -920,16 +1512,25 @@ class _SignInScreenState extends State<_SignInScreen> {
     } on FirebaseAuthException catch (error) {
       _setError(_friendlyAuthMessage(error, 'Google sign-in failed.'));
     } catch (_) {
-      _setError('Google sign-in could not be completed.');
+      _setError(googleCouldNotComplete);
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   Future<void> _sendOtp() async {
+    final couldNotSendOtp = appText(
+      context,
+      'Could not send OTP. Try again.',
+      'OTP नहीं भेजा जा सका। कृपया फिर कोशिश करें।',
+    );
     final phoneNumber = _normalizedPhone(phone.text);
     if (phoneNumber == null) {
-      _setError('Enter a valid phone number with country code.');
+      _setError(appText(
+        context,
+        'Enter a valid phone number with country code.',
+        'देश कोड के साथ सही फोन नंबर दर्ज करें।',
+      ));
       return;
     }
 
@@ -946,7 +1547,11 @@ class _SignInScreenState extends State<_SignInScreen> {
         if (mounted) {
           setState(() {
             otpSent = true;
-            status = 'OTP sent to $phoneNumber.';
+            status = appText(
+              context,
+              'OTP sent to $phoneNumber.',
+              '$phoneNumber पर OTP भेजा गया।',
+            );
             statusIsError = false;
           });
         }
@@ -958,7 +1563,12 @@ class _SignInScreenState extends State<_SignInScreen> {
           },
           verificationFailed: (error) {
             if (mounted) {
-              _setError(error.message ?? 'Phone verification failed.');
+              _setError(error.message ??
+                  appText(
+                    context,
+                    'Phone verification failed.',
+                    'फोन सत्यापन असफल रहा।',
+                  ));
             }
           },
           codeSent: (id, _) {
@@ -966,7 +1576,11 @@ class _SignInScreenState extends State<_SignInScreen> {
               setState(() {
                 verificationId = id;
                 otpSent = true;
-                status = 'OTP sent to $phoneNumber.';
+                status = appText(
+                  context,
+                  'OTP sent to $phoneNumber.',
+                  '$phoneNumber पर OTP भेजा गया।',
+                );
                 statusIsError = false;
               });
             }
@@ -979,16 +1593,25 @@ class _SignInScreenState extends State<_SignInScreen> {
     } on FirebaseAuthException catch (error) {
       _setError(_friendlyAuthMessage(error, 'Could not send OTP.'));
     } catch (_) {
-      _setError('Could not send OTP. Try again.');
+      _setError(couldNotSendOtp);
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   Future<void> _verifyOtp() async {
+    final otpCouldNotComplete = appText(
+      context,
+      'OTP verification could not be completed.',
+      'OTP सत्यापन पूरा नहीं हो सका।',
+    );
     final code = otp.text.trim();
     if (code.length < 4) {
-      _setError('Enter the OTP received on your phone.');
+      _setError(appText(
+        context,
+        'Enter the OTP received on your phone.',
+        'फोन पर प्राप्त OTP दर्ज करें।',
+      ));
       return;
     }
 
@@ -1002,14 +1625,22 @@ class _SignInScreenState extends State<_SignInScreen> {
       if (kIsWeb) {
         final result = confirmationResult;
         if (result == null) {
-          _setError('Please request OTP again.');
+          _setError(appText(
+            context,
+            'Please request OTP again.',
+            'कृपया फिर से OTP मंगाएं।',
+          ));
           return;
         }
         await result.confirm(code);
       } else {
         final id = verificationId;
         if (id == null) {
-          _setError('Please request OTP again.');
+          _setError(appText(
+            context,
+            'Please request OTP again.',
+            'कृपया फिर से OTP मंगाएं।',
+          ));
           return;
         }
         final credential = PhoneAuthProvider.credential(
@@ -1021,7 +1652,7 @@ class _SignInScreenState extends State<_SignInScreen> {
     } on FirebaseAuthException catch (error) {
       _setError(_friendlyAuthMessage(error, 'OTP verification failed.'));
     } catch (_) {
-      _setError('OTP verification could not be completed.');
+      _setError(otpCouldNotComplete);
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -1078,9 +1709,14 @@ class _SignInScreenState extends State<_SignInScreen> {
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          'Sign in to Guruvandan',
+                          appText(
+                            context,
+                            'Sign in to Guruvandan',
+                            'गुरुवंदन में साइन इन करें',
+                          ),
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.lora(
+                          style: _headingStyle(
+                            LanguageScope.of(context).language,
                             color: AppColors.ink,
                             fontSize: 31,
                             height: 1.08,
@@ -1089,7 +1725,11 @@ class _SignInScreenState extends State<_SignInScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Use Google or phone number to begin your spiritual routine.',
+                          appText(
+                            context,
+                            'Use Google or phone number to begin your spiritual routine.',
+                            'अपनी आध्यात्मिक दिनचर्या शुरू करने के लिए Google या फोन नंबर का उपयोग करें।',
+                          ),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyLarge,
                         ),
@@ -1098,7 +1738,11 @@ class _SignInScreenState extends State<_SignInScreen> {
                           onPressed: busy ? null : _signInWithGoogle,
                           icon:
                               const Icon(Icons.g_mobiledata_rounded, size: 31),
-                          label: const Text('Continue with Google'),
+                          label: Text(appText(
+                            context,
+                            'Continue with Google',
+                            'Google से जारी रखें',
+                          )),
                           style: FilledButton.styleFrom(
                             minimumSize: const Size.fromHeight(58),
                             backgroundColor: AppColors.maroon,
@@ -1112,7 +1756,7 @@ class _SignInScreenState extends State<_SignInScreen> {
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 12),
                               child: Text(
-                                'or phone',
+                                appText(context, 'or phone', 'या फोन'),
                                 style: TextStyle(
                                   color: AppColors.taupe,
                                   fontWeight: FontWeight.w800,
@@ -1128,7 +1772,11 @@ class _SignInScreenState extends State<_SignInScreen> {
                           enabled: !busy && !otpSent,
                           keyboardType: TextInputType.phone,
                           textInputAction: TextInputAction.next,
-                          decoration: _inputDecoration('Phone number').copyWith(
+                          decoration: _inputDecoration(appText(
+                            context,
+                            'Phone number',
+                            'फोन नंबर',
+                          )).copyWith(
                             hintText: '+91 98765 43210',
                             prefixIcon: const Icon(Icons.phone_rounded),
                           ),
@@ -1141,7 +1789,11 @@ class _SignInScreenState extends State<_SignInScreen> {
                             keyboardType: TextInputType.number,
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => _verifyOtp(),
-                            decoration: _inputDecoration('OTP code').copyWith(
+                            decoration: _inputDecoration(appText(
+                              context,
+                              'OTP code',
+                              'OTP कोड',
+                            )).copyWith(
                               prefixIcon: const Icon(Icons.sms_rounded),
                             ),
                           ),
@@ -1153,7 +1805,10 @@ class _SignInScreenState extends State<_SignInScreen> {
                           icon: Icon(otpSent
                               ? Icons.verified_user_rounded
                               : Icons.sms_rounded),
-                          label: Text(otpSent ? 'Verify OTP' : 'Send OTP'),
+                          label: Text(otpSent
+                              ? appText(
+                                  context, 'Verify OTP', 'OTP सत्यापित करें')
+                              : appText(context, 'Send OTP', 'OTP भेजें')),
                         ),
                         if (otpSent) ...[
                           const SizedBox(height: 10),
@@ -1169,7 +1824,11 @@ class _SignInScreenState extends State<_SignInScreen> {
                                       status = null;
                                     });
                                   },
-                            child: const Text('Use another phone number'),
+                            child: Text(appText(
+                              context,
+                              'Use another phone number',
+                              'दूसरा फोन नंबर उपयोग करें',
+                            )),
                           ),
                         ],
                         if (status != null) ...[
@@ -1208,9 +1867,7 @@ class _DevoteeShellState extends State<DevoteeShell>
   static const nameKey = 'guruvandan_flutter:name';
 
   late final FirebaseContentService content;
-  final satsangPlayer = AudioPlayer();
-  final chantPlayer = AudioPlayer();
-  final mantraLoopPlayer = AudioPlayer();
+  final List<StreamSubscription<dynamic>> audioSubscriptions = [];
 
   PracticeTab tab = PracticeTab.home;
   SatsangSession selectedSession = _defaultSession();
@@ -1228,9 +1885,15 @@ class _DevoteeShellState extends State<DevoteeShell>
   bool customMeditationDurationSelected = false;
   bool meditationRunning = false;
   bool meditationComplete = false;
+  bool meditationSessionStarted = false;
   bool mantraLoopEnabled = false;
   bool mantraLoopPlaying = false;
+  bool meditationUsesMantra = false;
+  bool backgroundAudioPlaying = false;
+  bool audioMutationInProgress = false;
+  bool audioCompletionHandled = false;
   bool silentPromptOpen = false;
+  BackgroundPlaybackKind playbackKind = BackgroundPlaybackKind.none;
   int meditationRunToken = 0;
   MeditationChantPhase? meditationChantPhase;
   DateTime? meditationEndsAt;
@@ -1244,16 +1907,15 @@ class _DevoteeShellState extends State<DevoteeShell>
     content = FirebaseContentService(widget.firebaseReady);
     _loadLocalState();
     _wireAudio();
-    _configureAudioPlayers();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     meditationTimer?.cancel();
-    satsangPlayer.dispose();
-    chantPlayer.dispose();
-    mantraLoopPlayer.dispose();
+    for (final subscription in audioSubscriptions) {
+      unawaited(subscription.cancel());
+    }
     super.dispose();
   }
 
@@ -1265,34 +1927,64 @@ class _DevoteeShellState extends State<DevoteeShell>
   }
 
   void _wireAudio() {
-    satsangPlayer.onPositionChanged.listen((position) {
-      if (mounted) setState(() => audioPosition = position);
-    });
-    satsangPlayer.onDurationChanged.listen((duration) {
-      if (mounted) setState(() => audioDuration = duration);
-    });
-    satsangPlayer.onPlayerComplete.listen((_) {
-      if (activeTrackTask != null) _markTask(activeTrackTask!);
-      if (mounted) {
-        setState(() {
-          activeTrackId = null;
-          activeTrackTask = null;
-          audioPosition = Duration.zero;
-        });
+    final player = _backgroundAudioPlayer;
+    if (player == null) return;
+
+    audioSubscriptions.add(player.positionStream.listen((position) {
+      if (mounted && playbackKind == BackgroundPlaybackKind.satsang) {
+        setState(() => audioPosition = position);
       }
-    });
-    mantraLoopPlayer.onPlayerStateChanged.listen((state) {
-      if (mounted) {
-        setState(() => mantraLoopPlaying = state == PlayerState.playing);
+    }));
+    audioSubscriptions.add(player.durationStream.listen((duration) {
+      if (mounted &&
+          playbackKind == BackgroundPlaybackKind.satsang &&
+          duration != null) {
+        setState(() => audioDuration = duration);
       }
-    });
+    }));
+    audioSubscriptions.add(
+      player.playerStateStream.listen(_handleBackgroundPlayerState),
+    );
   }
 
-  void _configureAudioPlayers() {
-    final context = _longFormAudioContext();
-    unawaited(satsangPlayer.setAudioContext(context).catchError((_) {}));
-    unawaited(chantPlayer.setAudioContext(context).catchError((_) {}));
-    unawaited(mantraLoopPlayer.setAudioContext(context).catchError((_) {}));
+  void _handleBackgroundPlayerState(ja.PlayerState state) {
+    final kind = playbackKind;
+
+    if (mounted) {
+      setState(() {
+        backgroundAudioPlaying = state.playing;
+        mantraLoopPlaying = state.playing &&
+            (kind == BackgroundPlaybackKind.mantra ||
+                (kind == BackgroundPlaybackKind.meditation &&
+                    meditationUsesMantra));
+      });
+    }
+
+    if (audioMutationInProgress) return;
+
+    if (state.processingState == ja.ProcessingState.completed &&
+        !audioCompletionHandled) {
+      audioCompletionHandled = true;
+      unawaited(_handleBackgroundCompletion(kind));
+      return;
+    }
+
+    if (kind == BackgroundPlaybackKind.meditation &&
+        meditationSessionStarted &&
+        meditationChantPhase == null) {
+      if (!state.playing &&
+          meditationRunning &&
+          state.processingState == ja.ProcessingState.ready) {
+        _pauseMeditationClock();
+      } else if (state.playing && !meditationRunning && remainingSeconds > 0) {
+        _startMeditationTimer(meditationRunToken);
+      }
+    }
+
+    if (state.processingState == ja.ProcessingState.idle &&
+        kind != BackgroundPlaybackKind.none) {
+      unawaited(_handleBackgroundStop(kind));
+    }
   }
 
   String get _nameStorageKey =>
@@ -1301,21 +1993,56 @@ class _DevoteeShellState extends State<DevoteeShell>
   String get _routineStorageKey =>
       widget.user == null ? routineKey : '$routineKey:${widget.user!.uid}';
 
+  DatabaseReference? get _cloudProfileReference {
+    final user = widget.user;
+    if (!widget.firebaseReady || user == null) return null;
+    return FirebaseDatabase.instance.ref('users/${user.uid}/profile');
+  }
+
+  Future<DevoteeProfile?> _loadCloudProfile() async {
+    final reference = _cloudProfileReference;
+    if (reference == null) return null;
+
+    try {
+      final snapshot =
+          await reference.get().timeout(const Duration(seconds: 6));
+      return DevoteeProfile.fromMap(snapshot.value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveCloudProfile(DevoteeProfile profile) async {
+    final reference = _cloudProfileReference;
+    if (reference == null) return;
+
+    try {
+      await reference.set({
+        ...profile.toJson(),
+        'profileCompleted': true,
+        'updatedAt': ServerValue.timestamp,
+      }).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // The local account copy remains available while Firebase is offline.
+    }
+  }
+
   Future<void> _loadLocalState() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUserName = prefs.getString(_nameStorageKey);
-    final savedName = savedUserName ??
-        (widget.user == null ? null : prefs.getString(nameKey));
     final savedRecords = prefs.getString(_routineStorageKey) ??
         (widget.user == null ? null : prefs.getString(routineKey));
-    final savedProfile = DevoteeProfile.fromStoredValue(savedName);
+    var savedProfile = DevoteeProfile.fromStoredValue(savedUserName);
+
+    if (savedProfile == null && widget.user == null) {
+      savedProfile = DevoteeProfile.fromStoredValue(prefs.getString(nameKey));
+    }
+    savedProfile ??= await _loadCloudProfile();
 
     if (savedProfile != null) {
       devoteeProfile = savedProfile;
-      if (savedUserName == null && widget.user != null) {
-        await prefs.setString(
-            _nameStorageKey, jsonEncode(savedProfile.toJson()));
-      }
+      await prefs.setString(_nameStorageKey, jsonEncode(savedProfile.toJson()));
+      if (widget.user != null) unawaited(_saveCloudProfile(savedProfile));
     } else {
       needsProfileName = true;
     }
@@ -1348,6 +2075,7 @@ class _DevoteeShellState extends State<DevoteeShell>
   Future<void> _saveProfile(DevoteeProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_nameStorageKey, jsonEncode(profile.toJson()));
+    if (widget.user != null) unawaited(_saveCloudProfile(profile));
     if (mounted) {
       setState(() {
         devoteeProfile = profile;
@@ -1403,7 +2131,7 @@ class _DevoteeShellState extends State<DevoteeShell>
 
   RoutineStats get stats {
     final completeKeys = records.entries
-        .where((entry) => _isComplete(entry.value))
+        .where((entry) => _isMeditationDay(entry.value))
         .map((entry) => entry.key)
         .toList()
       ..sort();
@@ -1424,13 +2152,14 @@ class _DevoteeShellState extends State<DevoteeShell>
     }
 
     var cursor = DateTime.now();
-    if (!_isComplete(records[DateFormat('yyyy-MM-dd').format(cursor)] ?? {})) {
+    if (!_isMeditationDay(
+        records[DateFormat('yyyy-MM-dd').format(cursor)] ?? {})) {
       cursor = cursor.subtract(const Duration(days: 1));
     }
 
     var current = 0;
-    while (
-        _isComplete(records[DateFormat('yyyy-MM-dd').format(cursor)] ?? {})) {
+    while (_isMeditationDay(
+        records[DateFormat('yyyy-MM-dd').format(cursor)] ?? {})) {
       current++;
       cursor = cursor.subtract(const Duration(days: 1));
     }
@@ -1447,10 +2176,8 @@ class _DevoteeShellState extends State<DevoteeShell>
     );
   }
 
-  bool _isComplete(Map<String, bool> item) {
-    return item[RoutineTask.morningSatsang.name] == true &&
-        item[RoutineTask.eveningSatsang.name] == true &&
-        item[RoutineTask.meditation.name] == true;
+  bool _isMeditationDay(Map<String, bool> item) {
+    return item[RoutineTask.meditation.name] == true;
   }
 
   Future<void> _markTask(RoutineTask task) async {
@@ -1463,15 +2190,142 @@ class _DevoteeShellState extends State<DevoteeShell>
     await _saveRecords();
   }
 
+  MediaItem _backgroundMediaItem({
+    required String id,
+    required String title,
+    required String description,
+    Duration? duration,
+  }) {
+    return MediaItem(
+      id: id,
+      album: 'Guruvandan',
+      title: title,
+      artist: description,
+      duration: duration,
+    );
+  }
+
+  ja.AudioSource _assetAudioSource(
+    String assetPath,
+    MediaItem mediaItem,
+  ) {
+    final normalized =
+        assetPath.startsWith('assets/') ? assetPath : 'assets/$assetPath';
+    return ja.AudioSource.asset(normalized, tag: mediaItem);
+  }
+
+  Future<void> _prepareBackgroundAudio({
+    required ja.AudioSource source,
+    required BackgroundPlaybackKind kind,
+    required bool loop,
+    required double volume,
+  }) async {
+    final player = _backgroundAudioPlayer;
+    if (player == null) return;
+
+    audioMutationInProgress = true;
+    audioCompletionHandled = false;
+    try {
+      await player.stop();
+      playbackKind = kind;
+      await player.setLoopMode(loop ? ja.LoopMode.one : ja.LoopMode.off);
+      await player.setVolume(volume);
+      await player.setAudioSource(source);
+    } finally {
+      audioMutationInProgress = false;
+    }
+  }
+
+  void _playPreparedBackgroundAudio() {
+    final player = _backgroundAudioPlayer;
+    if (player == null) return;
+    unawaited(player.play());
+  }
+
+  Future<void> _stopBackgroundAudio() async {
+    final player = _backgroundAudioPlayer;
+    audioMutationInProgress = true;
+    try {
+      playbackKind = BackgroundPlaybackKind.none;
+      if (player != null) {
+        await player.stop();
+        await player.setLoopMode(ja.LoopMode.off);
+        await player.setVolume(1);
+      }
+    } finally {
+      audioMutationInProgress = false;
+      backgroundAudioPlaying = false;
+    }
+  }
+
+  Future<void> _handleBackgroundCompletion(
+      BackgroundPlaybackKind completedKind) async {
+    if (completedKind == BackgroundPlaybackKind.satsang) {
+      final completedTask = activeTrackTask;
+      if (mounted) {
+        setState(() {
+          activeTrackId = null;
+          activeTrackTask = null;
+          audioPosition = Duration.zero;
+          backgroundAudioPlaying = false;
+        });
+      }
+      if (completedTask != null) await _markTask(completedTask);
+      await _stopBackgroundAudio();
+    }
+  }
+
+  Future<void> _handleBackgroundStop(BackgroundPlaybackKind stoppedKind) async {
+    if (audioMutationInProgress || playbackKind != stoppedKind) return;
+
+    playbackKind = BackgroundPlaybackKind.none;
+    if (stoppedKind == BackgroundPlaybackKind.meditation) {
+      _pauseMeditationClock();
+    }
+    if (!mounted) return;
+    setState(() {
+      backgroundAudioPlaying = false;
+      if (stoppedKind == BackgroundPlaybackKind.satsang) {
+        activeTrackId = null;
+        activeTrackTask = null;
+        audioPosition = Duration.zero;
+      }
+      if (stoppedKind == BackgroundPlaybackKind.mantra) {
+        mantraLoopEnabled = false;
+        mantraLoopPlaying = false;
+      }
+    });
+  }
+
+  void _pauseMeditationClock() {
+    if (!meditationRunning) return;
+    _syncMeditationTimerWithClock();
+    if (!meditationRunning) return;
+    meditationTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        meditationRunning = false;
+        meditationEndsAt = null;
+      });
+    }
+  }
+
   Future<void> _resetToday() async {
     meditationRunToken++;
-    await chantPlayer.stop();
+    if (playbackKind == BackgroundPlaybackKind.meditation ||
+        playbackKind == BackgroundPlaybackKind.closingChant) {
+      await _stopBackgroundAudio();
+    }
     setState(() {
       records.remove(todayKey);
       meditationComplete = false;
       meditationRunning = false;
+      meditationSessionStarted = false;
       meditationChantPhase = null;
       meditationEndsAt = null;
+      meditationUsesMantra = false;
+      mantraLoopEnabled = false;
+      mantraLoopPlaying = false;
       remainingSeconds = selectedDurationSeconds;
     });
     meditationTimer?.cancel();
@@ -1482,25 +2336,23 @@ class _DevoteeShellState extends State<DevoteeShell>
     meditationRunToken++;
     meditationTimer?.cancel();
     meditationEndsAt = null;
-    await satsangPlayer.stop();
-    await chantPlayer.stop();
-    await mantraLoopPlayer.stop();
+    await _stopBackgroundAudio();
     await FirebaseAuth.instance.signOut();
   }
 
   Future<void> _playSatsang(SatsangTrack track) async {
     final task = _routineTaskForSatsangSession(track.session);
+    final player = _backgroundAudioPlayer;
 
     try {
       if (activeTrackId == track.id) {
-        final state = satsangPlayer.state;
-        if (state == PlayerState.playing) {
-          await satsangPlayer.pause();
+        if (player?.playing == true) {
+          await player?.pause();
         } else {
           final confirmed =
               await _confirmPhoneSilent('your satsang can continue peacefully');
           if (!confirmed) return;
-          await satsangPlayer.resume();
+          _playPreparedBackgroundAudio();
         }
         setState(() {});
         return;
@@ -1510,29 +2362,60 @@ class _DevoteeShellState extends State<DevoteeShell>
           await _confirmPhoneSilent('your satsang can continue peacefully');
       if (!confirmed) return;
 
-      await _stopMantraLoop();
-      await satsangPlayer.stop();
+      _pauseMeditationClock();
+      await _stopBackgroundAudio();
+      if (!mounted) return;
       audioPosition = Duration.zero;
       audioDuration = Duration.zero;
 
+      final mediaItem = _backgroundMediaItem(
+        id: 'satsang:${track.id}',
+        title: track.title,
+        description: track.session == SatsangSession.aarti
+            ? appText(context, 'Aarti', 'आरती')
+            : appText(context, 'Satsang', 'सत्संग'),
+      );
+
+      late final ja.AudioSource source;
       if (track.audioUrl != null && track.audioUrl!.isNotEmpty) {
-        await satsangPlayer.play(UrlSource(track.audioUrl!));
+        source = ja.AudioSource.uri(
+          Uri.parse(track.audioUrl!),
+          tag: mediaItem,
+        );
       } else if (track.assetPath != null && track.assetPath!.isNotEmpty) {
-        await satsangPlayer.play(AssetSource(track.assetPath!));
+        source = _assetAudioSource(track.assetPath!, mediaItem);
       } else {
-        await satsangPlayer
-            .play(AssetSource('audio/morning_satsang_astuti_rishikesh.mp3'));
+        source = _assetAudioSource(
+          'audio/morning_satsang_astuti_rishikesh.mp3',
+          mediaItem,
+        );
       }
+
+      await _prepareBackgroundAudio(
+        source: source,
+        kind: BackgroundPlaybackKind.satsang,
+        loop: false,
+        volume: 1,
+      );
 
       setState(() {
         activeTrackId = track.id;
         activeTrackTask = task;
+        mantraLoopEnabled = false;
+        mantraLoopPlaying = false;
+        meditationUsesMantra = false;
       });
+      _playPreparedBackgroundAudio();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('This satsang audio could not be played.')),
+        SnackBar(
+          content: Text(appText(
+            context,
+            'This satsang audio could not be played.',
+            'यह सत्संग ऑडियो चलाया नहीं जा सका।',
+          )),
+        ),
       );
     }
   }
@@ -1547,7 +2430,10 @@ class _DevoteeShellState extends State<DevoteeShell>
   void _setMeditationDuration(Duration duration, {required bool custom}) {
     meditationRunToken++;
     meditationTimer?.cancel();
-    unawaited(chantPlayer.stop());
+    if (playbackKind == BackgroundPlaybackKind.meditation ||
+        playbackKind == BackgroundPlaybackKind.closingChant) {
+      unawaited(_stopBackgroundAudio());
+    }
     final safeSeconds = _minimumMeditationDuration(duration).inSeconds;
     setState(() {
       selectedDurationSeconds = safeSeconds;
@@ -1555,8 +2441,12 @@ class _DevoteeShellState extends State<DevoteeShell>
       customMeditationDurationSelected = custom;
       meditationRunning = false;
       meditationComplete = false;
+      meditationSessionStarted = false;
       meditationChantPhase = null;
       meditationEndsAt = null;
+      meditationUsesMantra = false;
+      mantraLoopEnabled = false;
+      mantraLoopPlaying = false;
     });
   }
 
@@ -1580,16 +2470,18 @@ class _DevoteeShellState extends State<DevoteeShell>
     if (meditationChantPhase != null) return;
 
     if (meditationRunning) {
-      _syncMeditationTimerWithClock();
-      meditationTimer?.cancel();
-      setState(() {
-        meditationRunning = false;
-        meditationEndsAt = null;
-      });
+      unawaited(_pauseMeditationSession());
       return;
     }
 
     unawaited(_beginMeditationSession());
+  }
+
+  Future<void> _pauseMeditationSession() async {
+    _pauseMeditationClock();
+    if (playbackKind == BackgroundPlaybackKind.meditation) {
+      await _backgroundAudioPlayer?.pause();
+    }
   }
 
   Future<void> _beginMeditationSession() async {
@@ -1605,7 +2497,50 @@ class _DevoteeShellState extends State<DevoteeShell>
     }
 
     final token = ++meditationRunToken;
+    await _prepareMeditationBackgroundAudio(
+      withMantra: mantraLoopEnabled,
+    );
+    if (!mounted || token != meditationRunToken) return;
+    setState(() {
+      meditationSessionStarted = true;
+      meditationUsesMantra = mantraLoopEnabled;
+      activeTrackId = null;
+      activeTrackTask = null;
+      audioPosition = Duration.zero;
+    });
     _startMeditationTimer(token);
+    _playPreparedBackgroundAudio();
+  }
+
+  Future<void> _prepareMeditationBackgroundAudio({
+    required bool withMantra,
+  }) async {
+    final duration = Duration(seconds: remainingSeconds);
+    final durationLabel = _formatDurationLabel(context, duration);
+    final mediaItem = _backgroundMediaItem(
+      id: 'meditation',
+      title: withMantra
+          ? appText(context, 'Meditation with Om', 'ॐ के साथ ध्यान')
+          : appText(context, 'Meditation', 'ध्यान'),
+      description: appText(
+        context,
+        '$durationLabel session',
+        '$durationLabel का सत्र',
+      ),
+      duration: duration,
+    );
+
+    await _prepareBackgroundAudio(
+      source: _assetAudioSource(
+        withMantra
+            ? 'audio/om_mantra_417hz_loop.mp3'
+            : 'audio/meditation_chant.mp3',
+        mediaItem,
+      ),
+      kind: BackgroundPlaybackKind.meditation,
+      loop: true,
+      volume: withMantra ? 1 : 0,
+    );
   }
 
   void _startMeditationTimer(int token) {
@@ -1656,7 +2591,13 @@ class _DevoteeShellState extends State<DevoteeShell>
   Future<void> _finishMeditationSession(int token) async {
     if (!mounted || token != meditationRunToken) return;
 
-    await _stopMantraLoop();
+    final completionChimeError = appText(
+      context,
+      'Completion chime could not be played. Meditation is marked complete.',
+      'समापन चाइम नहीं चल सका। ध्यान पूर्ण मान लिया गया है।',
+    );
+
+    await _stopBackgroundAudio();
 
     if (!mounted || token != meditationRunToken) return;
 
@@ -1664,13 +2605,15 @@ class _DevoteeShellState extends State<DevoteeShell>
       meditationChantPhase = MeditationChantPhase.closing;
       meditationRunning = false;
       meditationEndsAt = null;
+      meditationUsesMantra = false;
+      mantraLoopEnabled = false;
+      mantraLoopPlaying = false;
     });
 
     try {
       await _playMeditationChant();
     } catch (_) {
-      _showMeditationAudioError(
-          'Completion chime could not be played. Meditation is marked complete.');
+      _showMeditationAudioError(completionChimeError);
     }
 
     if (!mounted || token != meditationRunToken) return;
@@ -1682,29 +2625,45 @@ class _DevoteeShellState extends State<DevoteeShell>
     setState(() {
       meditationChantPhase = null;
       meditationComplete = true;
+      meditationSessionStarted = false;
       meditationEndsAt = null;
     });
   }
 
   Future<void> _playMeditationChant() async {
-    await chantPlayer.stop();
+    final player = _backgroundAudioPlayer;
+    if (player == null) return;
+
+    final mediaItem = _backgroundMediaItem(
+      id: 'meditation-closing-chant',
+      title: appText(context, 'Meditation complete', 'ध्यान पूर्ण'),
+      description: appText(context, 'Closing chant', 'समापन मंत्र'),
+    );
+    await _prepareBackgroundAudio(
+      source: _assetAudioSource('audio/meditation_chant.mp3', mediaItem),
+      kind: BackgroundPlaybackKind.closingChant,
+      loop: false,
+      volume: 1,
+    );
 
     final completed = Completer<void>();
     void finish() {
       if (!completed.isCompleted) completed.complete();
     }
 
-    final completeSub = chantPlayer.onPlayerComplete.listen((_) => finish());
-    final stateSub = chantPlayer.onPlayerStateChanged.listen((state) {
-      if (state == PlayerState.stopped) finish();
+    final stateSub = player.playerStateStream.listen((state) {
+      if (state.processingState == ja.ProcessingState.completed ||
+          state.processingState == ja.ProcessingState.idle) {
+        finish();
+      }
     });
 
     try {
-      await chantPlayer.play(AssetSource('audio/meditation_chant.mp3'));
+      _playPreparedBackgroundAudio();
       await completed.future.timeout(const Duration(minutes: 5));
     } finally {
-      await completeSub.cancel();
       await stateSub.cancel();
+      await _stopBackgroundAudio();
     }
   }
 
@@ -1722,19 +2681,52 @@ class _DevoteeShellState extends State<DevoteeShell>
     final confirmed = await _confirmPhoneSilent(
         'the Om mantra can play without interruption');
     if (!confirmed) return;
+    if (!mounted) return;
 
     try {
-      await satsangPlayer.stop();
-      await mantraLoopPlayer.stop();
-      await mantraLoopPlayer.setReleaseMode(ReleaseMode.loop);
-      await mantraLoopPlayer
-          .play(AssetSource('audio/om_mantra_417hz_loop.mp3'));
+      if (meditationSessionStarted && remainingSeconds > 0) {
+        final shouldKeepPlaying = meditationRunning;
+        await _prepareMeditationBackgroundAudio(withMantra: true);
+
+        if (!mounted) return;
+        setState(() {
+          mantraLoopEnabled = true;
+          mantraLoopPlaying = shouldKeepPlaying;
+          meditationUsesMantra = true;
+        });
+        if (shouldKeepPlaying) _playPreparedBackgroundAudio();
+        return;
+      }
+
+      final mediaItem = _backgroundMediaItem(
+        id: 'om-mantra-417hz',
+        title: appText(context, 'Om Mantra', 'ॐ मंत्र'),
+        description: appText(
+          context,
+          '417Hz meditation ambience',
+          '417Hz ध्यान ध्वनि',
+        ),
+      );
+      await _prepareBackgroundAudio(
+        source: _assetAudioSource(
+          'audio/om_mantra_417hz_loop.mp3',
+          mediaItem,
+        ),
+        kind: BackgroundPlaybackKind.mantra,
+        loop: true,
+        volume: 1,
+      );
 
       if (!mounted) return;
       setState(() {
         mantraLoopEnabled = true;
         mantraLoopPlaying = true;
+        meditationUsesMantra = false;
+        activeTrackId = null;
+        activeTrackTask = null;
+        audioPosition = Duration.zero;
       });
+      _playPreparedBackgroundAudio();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -1742,17 +2734,41 @@ class _DevoteeShellState extends State<DevoteeShell>
         mantraLoopPlaying = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Om mantra audio could not be played.')),
+        SnackBar(
+          content: Text(appText(
+            context,
+            'Om mantra audio could not be played.',
+            'ॐ मंत्र ऑडियो चलाया नहीं जा सका।',
+          )),
+        ),
       );
     }
   }
 
   Future<void> _stopMantraLoop() async {
-    await mantraLoopPlayer.stop();
+    if (meditationSessionStarted &&
+        remainingSeconds > 0 &&
+        meditationChantPhase == null) {
+      final shouldKeepPlaying = meditationRunning;
+      await _prepareMeditationBackgroundAudio(withMantra: false);
+      if (!mounted) return;
+      setState(() {
+        mantraLoopEnabled = false;
+        mantraLoopPlaying = false;
+        meditationUsesMantra = false;
+      });
+      if (shouldKeepPlaying) _playPreparedBackgroundAudio();
+      return;
+    }
+
+    if (playbackKind == BackgroundPlaybackKind.mantra) {
+      await _stopBackgroundAudio();
+    }
     if (!mounted) return;
     setState(() {
       mantraLoopEnabled = false;
       mantraLoopPlaying = false;
+      meditationUsesMantra = false;
     });
   }
 
@@ -1776,12 +2792,21 @@ class _DevoteeShellState extends State<DevoteeShell>
   void _resetMeditation() {
     meditationRunToken++;
     meditationTimer?.cancel();
-    unawaited(chantPlayer.stop());
+    if (playbackKind == BackgroundPlaybackKind.meditation ||
+        playbackKind == BackgroundPlaybackKind.closingChant) {
+      unawaited(_stopBackgroundAudio());
+    }
     setState(() {
       meditationRunning = false;
       meditationComplete = false;
+      meditationSessionStarted = false;
       meditationChantPhase = null;
       meditationEndsAt = null;
+      meditationUsesMantra = false;
+      if (playbackKind != BackgroundPlaybackKind.mantra) {
+        mantraLoopEnabled = false;
+        mantraLoopPlaying = false;
+      }
       remainingSeconds = selectedDurationSeconds;
     });
   }
@@ -1811,7 +2836,7 @@ class _DevoteeShellState extends State<DevoteeShell>
 
     final screens = {
       PracticeTab.home: _HomeScreen(
-        name: devoteeProfile?.displayName ?? 'Bhakt',
+        name: devoteeProfile?.displayName ?? appText(context, 'Bhakt', 'भक्त'),
         today: today,
         stats: stats,
         onOpenSatsang: (session) {
@@ -1830,10 +2855,13 @@ class _DevoteeShellState extends State<DevoteeShell>
         activeTrackId: activeTrackId,
         audioPosition: audioPosition,
         audioDuration: audioDuration,
-        isPlaying: satsangPlayer.state == PlayerState.playing,
+        isPlaying: playbackKind == BackgroundPlaybackKind.satsang &&
+            backgroundAudioPlaying,
         today: today,
         onSessionChanged: (session) async {
-          await satsangPlayer.stop();
+          if (playbackKind == BackgroundPlaybackKind.satsang) {
+            await _stopBackgroundAudio();
+          }
           setState(() {
             selectedSession = session;
             activeTrackId = null;
@@ -1947,7 +2975,11 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
       lastName: lastName.text,
     );
     if (profile == null) {
-      setState(() => error = 'Please enter your first name.');
+      setState(() => error = appText(
+            context,
+            'Please enter your first name.',
+            'कृपया अपना पहला नाम दर्ज करें।',
+          ));
       return;
     }
     widget.onContinue(profile);
@@ -1990,9 +3022,14 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Welcome to Guruvandan',
+                  appText(
+                    context,
+                    'Welcome to Guruvandan',
+                    'गुरुवंदन में आपका स्वागत है',
+                  ),
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.lora(
+                  style: _headingStyle(
+                    LanguageScope.of(context).language,
                     color: AppColors.ink,
                     fontSize: 31,
                     height: 1.08,
@@ -2001,7 +3038,11 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Please enter your name to begin your daily spiritual routine.',
+                  appText(
+                    context,
+                    'Please enter your name to begin your daily spiritual routine.',
+                    'अपनी दैनिक आध्यात्मिक दिनचर्या शुरू करने के लिए अपना नाम दर्ज करें।',
+                  ),
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
@@ -2014,7 +3055,9 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                   onChanged: (_) {
                     if (error != null) setState(() => error = null);
                   },
-                  decoration: _inputDecoration('First name').copyWith(
+                  decoration: _inputDecoration(
+                    appText(context, 'First name', 'पहला नाम'),
+                  ).copyWith(
                     errorText: error,
                     prefixIcon: const Icon(Icons.person_rounded),
                   ),
@@ -2024,7 +3067,9 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                   controller: middleName,
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
-                  decoration: _inputDecoration('Middle name').copyWith(
+                  decoration: _inputDecoration(
+                    appText(context, 'Middle name', 'मध्य नाम'),
+                  ).copyWith(
                     prefixIcon: const Icon(Icons.badge_rounded),
                   ),
                 ),
@@ -2034,7 +3079,9 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _continue(),
-                  decoration: _inputDecoration('Last name').copyWith(
+                  decoration: _inputDecoration(
+                    appText(context, 'Last name', 'अंतिम नाम'),
+                  ).copyWith(
                     prefixIcon: const Icon(Icons.family_restroom_rounded),
                   ),
                 ),
@@ -2042,7 +3089,7 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                 FilledButton.icon(
                   onPressed: _continue,
                   icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text('Begin'),
+                  label: Text(appText(context, 'Begin', 'शुरू करें')),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(58),
                     backgroundColor: AppColors.maroon,
@@ -2059,6 +3106,195 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
 
 class _GuruWelcomeDialog extends StatelessWidget {
   const _GuruWelcomeDialog({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final language = LanguageScope.of(context).language;
+
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: AppColors.offWhite,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.borderStrong),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.deepCrimson.withValues(alpha: 0.28),
+                      blurRadius: 38,
+                      offset: const Offset(0, 24),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppColors.maroon, AppColors.crimson],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 78,
+                            height: 78,
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: AppColors.offWhite,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: AppColors.softGold, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.deepCrimson
+                                      .withValues(alpha: 0.32),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/guru_image.jpeg',
+                                fit: BoxFit.cover,
+                                alignment: Alignment.topCenter,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Guruvandan',
+                            textAlign: TextAlign.center,
+                            style: _headingStyle(
+                              language,
+                              color: AppColors.offWhite,
+                              fontSize: 24,
+                              height: 1.05,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+                      child: Column(
+                        children: [
+                          Text(
+                            appText(
+                              context,
+                              'Jai Guru, $name!',
+                              'जय गुरु, $name!',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: _bodyStyle(
+                              language,
+                              color: AppColors.maroon,
+                              fontSize: 23,
+                              height: 1.18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: AppColors.softGold,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Icon(Icons.format_quote_rounded,
+                                  color: AppColors.rose, size: 30),
+                              const SizedBox(width: 10),
+                              Container(
+                                width: 34,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: AppColors.softGold,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            appText(
+                              context,
+                              'With the sacred blessings of Sadguru Maharaj, we warmly welcome you to this spiritual journey.',
+                              'सद्गुरु महाराज के पावन आशीर्वाद से, हम आपका इस आध्यात्मिक यात्रा में हार्दिक स्वागत करते हैं।',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: _bodyStyle(
+                              language,
+                              color: AppColors.taupe,
+                              fontSize: 18,
+                              height: 1.42,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(170, 56),
+                              backgroundColor: AppColors.maroon,
+                              foregroundColor: AppColors.offWhite,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 26),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              elevation: 8,
+                              shadowColor:
+                                  AppColors.maroon.withValues(alpha: 0.24),
+                              textStyle: _bodyStyle(
+                                language,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                height: 1.15,
+                              ),
+                            ),
+                            child: Text(
+                              appText(context, 'Enter', 'प्रवेश करें'),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ignore: unused_element
+class _GuruWelcomeDialogLegacy extends StatelessWidget {
+  const _GuruWelcomeDialogLegacy({required this.name});
 
   final String name;
 
@@ -2265,9 +3501,14 @@ class _SilentPhoneDialog extends StatelessWidget {
           ),
         ),
         title: Text(
-          'Put phone on silent',
+          appText(
+            context,
+            'Put phone on silent',
+            'फोन को साइलेंट करें',
+          ),
           textAlign: TextAlign.center,
-          style: GoogleFonts.lora(
+          style: _headingStyle(
+            LanguageScope.of(context).language,
             color: AppColors.ink,
             fontSize: 25,
             height: 1.1,
@@ -2275,7 +3516,11 @@ class _SilentPhoneDialog extends StatelessWidget {
           ),
         ),
         content: Text(
-          'Please put your phone on silent mode so $reason.',
+          appText(
+            context,
+            'Please put your phone on silent mode so $reason.',
+            'कृपया फोन को साइलेंट मोड पर रखें ताकि साधना बिना व्यवधान के चल सके।',
+          ),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyLarge,
         ),
@@ -2289,7 +3534,7 @@ class _SilentPhoneDialog extends StatelessWidget {
               backgroundColor: AppColors.maroon,
               foregroundColor: AppColors.offWhite,
             ),
-            child: const Text('OK'),
+            child: Text(appText(context, 'OK', 'ठीक है')),
           ),
         ],
       ),
@@ -2323,7 +3568,8 @@ class _HomeScreen extends StatelessWidget {
       initialData: fallbackQuotes,
       builder: (context, snapshot) {
         final quotes = snapshot.data ?? fallbackQuotes;
-        final quote = quotes[DateTime.now().day % quotes.length];
+        final quote = localizedWisdomQuote(
+            context, quotes[DateTime.now().day % quotes.length]);
 
         return _PageScaffold(
           children: [
@@ -2333,39 +3579,57 @@ class _HomeScreen extends StatelessWidget {
               onMeditation: onOpenMeditation,
               onEveningSatsang: () => onOpenSatsang(SatsangSession.evening),
             ),
-            _StatsRibbon(stats: stats),
+            _MeditationStreakPanel(
+              stats: stats,
+              todayDone: today[RoutineTask.meditation.name] == true,
+            ),
             _SectionHeader(
-              title: 'Today\'s Routine',
+              title: appText(
+                context,
+                'Today\'s Routine',
+                'आज की दिनचर्या',
+              ),
               action: IconButton.filledTonal(
                 onPressed: onResetToday,
                 icon: const Icon(Icons.restart_alt_rounded),
-                tooltip: 'Reset today',
+                tooltip: appText(context, 'Reset today', 'आज रीसेट करें'),
               ),
             ),
             _RoutineTile(
-              title: 'Morning satsang',
-              subtitle: 'Start the day with remembrance',
+              title: appText(context, 'Morning satsang', 'प्रातः सत्संग'),
+              subtitle: appText(
+                context,
+                'Start the day with remembrance',
+                'स्मरण के साथ दिन की शुरुआत करें',
+              ),
               done: today[RoutineTask.morningSatsang.name] == true,
               icon: Icons.wb_sunny_rounded,
               onTap: () => onOpenSatsang(SatsangSession.morning),
             ),
             _RoutineTile(
-              title: 'Meditation',
-              subtitle: 'Sit quietly with the timer',
+              title: appText(context, 'Meditation', 'ध्यान'),
+              subtitle: appText(
+                context,
+                'Sit quietly with the timer',
+                'टाइमर के साथ शांत बैठें',
+              ),
               done: today[RoutineTask.meditation.name] == true,
               icon: Icons.self_improvement_rounded,
               onTap: onOpenMeditation,
             ),
             _RoutineTile(
-              title: 'Evening satsang',
-              subtitle: 'Close the day in satsang',
+              title: appText(context, 'Evening satsang', 'शाम सत्संग'),
+              subtitle: appText(
+                context,
+                'Close the day in satsang',
+                'दिन का समापन सत्संग से करें',
+              ),
               done: today[RoutineTask.eveningSatsang.name] == true,
               icon: Icons.nights_stay_rounded,
               onTap: () => onOpenSatsang(SatsangSession.evening),
             ),
             _WisdomFeature(quote: quote),
             const _AboutHomeSection(),
-            _MilestonePanel(stats: stats),
           ],
         );
       },
@@ -2388,12 +3652,14 @@ class _HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final language = LanguageScope.of(context).language;
     final hour = DateTime.now().hour;
     final greeting = hour < 12
-        ? 'Jai Guru, $name'
+        ? appText(context, 'Jai Guru, $name', 'जय गुरु, $name')
         : hour < 18
-            ? 'Peaceful afternoon, $name'
-            : 'Blessed evening, $name';
+            ? appText(context, 'Peaceful afternoon, $name', 'शुभ दोपहर, $name')
+            : appText(
+                context, 'Blessed evening, $name', 'मंगलमय संध्या, $name');
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2451,7 +3717,8 @@ class _HeroPanel extends StatelessWidget {
                       greeting,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.lora(
+                      style: _headingStyle(
+                        language,
                         color: AppColors.surface,
                         fontSize: compact ? 29 : 34,
                         fontWeight: FontWeight.w900,
@@ -2460,10 +3727,15 @@ class _HeroPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'A gentle daily path for satsang, dhyan, wisdom, and seva of routine.',
+                      appText(
+                        context,
+                        'A gentle daily path for satsang, dhyan, wisdom, and seva of routine.',
+                        'सत्संग, ध्यान, ज्ञान और दैनिक साधना का सरल मार्ग।',
+                      ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
+                      style: _bodyStyle(
+                        language,
                         color: const Color(0xFFFFF1E2),
                         fontSize: 17,
                         height: 1.38,
@@ -2477,17 +3749,19 @@ class _HeroPanel extends StatelessWidget {
                       children: [
                         _HeroChip(
                           icon: Icons.wb_sunny_rounded,
-                          label: 'Morning satsang',
+                          label: appText(
+                              context, 'Morning satsang', 'प्रातः सत्संग'),
                           onTap: onMorningSatsang,
                         ),
                         _HeroChip(
                           icon: Icons.self_improvement_rounded,
-                          label: 'Dhyan',
+                          label: appText(context, 'Dhyan', 'ध्यान'),
                           onTap: onMeditation,
                         ),
                         _HeroChip(
                           icon: Icons.nights_stay_rounded,
-                          label: 'Evening satsang',
+                          label:
+                              appText(context, 'Evening satsang', 'शाम सत्संग'),
                           onTap: onEveningSatsang,
                         ),
                       ],
@@ -2633,92 +3907,379 @@ class _DawnTemplePainter extends CustomPainter {
   bool shouldRepaint(covariant _DawnTemplePainter oldDelegate) => false;
 }
 
-class _StatsRibbon extends StatelessWidget {
-  const _StatsRibbon({required this.stats});
+class _MeditationStreakPanel extends StatelessWidget {
+  const _MeditationStreakPanel({
+    required this.stats,
+    required this.todayDone,
+  });
 
   final RoutineStats stats;
+  final bool todayDone;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final gap = constraints.maxWidth < 380 ? 8.0 : 12.0;
-        return Row(
-          children: [
-            Expanded(
-                child: _StatCard(
-                    label: 'Current',
+    final language = LanguageScope.of(context).language;
+    final yesterdayDone = todayDone ? stats.current > 1 : stats.current > 0;
+    final milestoneDays = stats.daysToMilestone;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: _cardDecoration(color: AppColors.offWhite),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.rose,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.self_improvement_rounded,
+                  color: AppColors.maroon,
+                  size: 29,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      appText(
+                        context,
+                        'Meditation streak',
+                        'ध्यान की स्ट्रीक',
+                      ),
+                      style: _headingStyle(
+                        language,
+                        color: AppColors.ink,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      appText(
+                        context,
+                        'Meditate once each day to keep it going.',
+                        'इसे जारी रखने के लिए हर दिन एक बार ध्यान करें।',
+                      ),
+                      style: _bodyStyle(
+                        language,
+                        color: AppColors.taupe,
+                        fontSize: 15,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _StreakContinuity(
+            yesterdayDone: yesterdayDone,
+            todayDone: todayDone,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.timer_off_outlined,
+                color: AppColors.copper,
+                size: 20,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  appText(
+                    context,
+                    'Any meditation duration counts.',
+                    'ध्यान की कोई भी अवधि मान्य है।',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: _bodyStyle(
+                    language,
+                    color: AppColors.copper,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _StreakMetric(
+                    valueKey: const Key('meditation-streak-current'),
                     value: stats.current,
-                    icon: Icons.local_fire_department_rounded,
-                    color: AppColors.gold)),
-            SizedBox(width: gap),
-            Expanded(
-                child: _StatCard(
-                    label: 'Best',
+                    label: appText(
+                      context,
+                      'Current streak',
+                      'वर्तमान स्ट्रीक',
+                    ),
+                    color: AppColors.maroon,
+                  ),
+                ),
+                const VerticalDivider(color: AppColors.border),
+                Expanded(
+                  child: _StreakMetric(
+                    valueKey: const Key('meditation-streak-best'),
                     value: stats.best,
-                    icon: Icons.emoji_events_rounded,
-                    color: AppColors.sage)),
-            SizedBox(width: gap),
-            Expanded(
-                child: _StatCard(
-                    label: 'Total',
+                    label: appText(context, 'Best streak', 'सर्वश्रेष्ठ'),
+                    color: AppColors.sage,
+                  ),
+                ),
+                const VerticalDivider(color: AppColors.border),
+                Expanded(
+                  child: _StreakMetric(
+                    valueKey: const Key('meditation-streak-total'),
                     value: stats.total,
-                    icon: Icons.calendar_month_rounded,
-                    color: AppColors.maroon)),
-          ],
-        );
-      },
+                    label: appText(
+                      context,
+                      'Meditation days',
+                      'ध्यान के दिन',
+                    ),
+                    color: AppColors.gold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDF4ED),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.flag_rounded,
+                  color: AppColors.sage,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    appText(
+                      context,
+                      '$milestoneDays more ${milestoneDays == 1 ? 'day' : 'days'} to the next milestone',
+                      'अगले पड़ाव तक $milestoneDays दिन और',
+                    ),
+                    style: _bodyStyle(
+                      language,
+                      color: AppColors.sage,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
+class _StreakContinuity extends StatelessWidget {
+  const _StreakContinuity({
+    required this.yesterdayDone,
+    required this.todayDone,
   });
 
-  final String label;
-  final int value;
-  final IconData icon;
-  final Color color;
+  final bool yesterdayDone;
+  final bool todayDone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _StreakDayStep(
+            label: appText(context, 'Yesterday', 'बीता दिन'),
+            status: yesterdayDone
+                ? appText(context, 'Meditated', 'ध्यान किया')
+                : appText(context, 'No entry', 'दर्ज नहीं'),
+            icon: yesterdayDone ? Icons.check_rounded : Icons.remove_rounded,
+            active: yesterdayDone,
+          ),
+        ),
+        _StreakConnector(active: yesterdayDone),
+        Expanded(
+          child: _StreakDayStep(
+            label: appText(context, 'Today', 'आज'),
+            status: todayDone
+                ? appText(context, 'Complete', 'पूर्ण')
+                : appText(context, 'Meditate', 'ध्यान करें'),
+            icon: todayDone
+                ? Icons.check_rounded
+                : Icons.self_improvement_rounded,
+            active: todayDone,
+            highlighted: true,
+          ),
+        ),
+        _StreakConnector(active: todayDone),
+        Expanded(
+          child: _StreakDayStep(
+            label: appText(context, 'Tomorrow', 'अगला दिन'),
+            status: appText(context, 'Continue', 'जारी रखें'),
+            icon: Icons.arrow_forward_rounded,
+            active: false,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StreakConnector extends StatelessWidget {
+  const _StreakConnector({required this.active});
+
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 112),
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 23),
+      width: 24,
+      height: 3,
+      margin: const EdgeInsets.only(top: 20),
+      color: active ? AppColors.gold : AppColors.border,
+    );
+  }
+}
+
+class _StreakDayStep extends StatelessWidget {
+  const _StreakDayStep({
+    required this.label,
+    required this.status,
+    required this.icon,
+    required this.active,
+    this.highlighted = false,
+  });
+
+  final String label;
+  final String status;
+  final IconData icon;
+  final bool active;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final language = LanguageScope.of(context).language;
+    final color = active || highlighted ? AppColors.maroon : AppColors.muted;
+
+    return Column(
+      children: [
+        Container(
+          width: 43,
+          height: 43,
+          decoration: BoxDecoration(
+            color: active
+                ? AppColors.maroon
+                : highlighted
+                    ? AppColors.rose
+                    : AppColors.parchment,
+            shape: BoxShape.circle,
+            border: highlighted && !active
+                ? Border.all(color: AppColors.maroon, width: 2)
+                : null,
           ),
+          child: Icon(
+            icon,
+            color: active ? AppColors.offWhite : color,
+            size: 23,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: _bodyStyle(
+            language,
+            color: AppColors.ink,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          status,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: _bodyStyle(
+            language,
+            color: color,
+            fontSize: 12,
+            height: 1.15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StreakMetric extends StatelessWidget {
+  const _StreakMetric({
+    required this.valueKey,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final Key valueKey;
+  final int value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final language = LanguageScope.of(context).language;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: Column(
+        children: [
           Text(
             value.toString(),
+            key: valueKey,
             style: GoogleFonts.inter(
-              color: AppColors.ink,
-              fontSize: 31,
+              color: color,
+              fontSize: 29,
               fontWeight: FontWeight.w900,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
             label,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            textAlign: TextAlign.center,
+            style: _bodyStyle(
+              language,
               color: AppColors.taupe,
-              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              height: 1.15,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -2769,15 +4330,19 @@ class _SatsangScreen extends StatelessWidget {
 
         return _PageScaffold(
           children: [
-            const _ScreenTitle(
+            _ScreenTitle(
               icon: Icons.headphones_rounded,
-              title: 'Satsang',
-              subtitle:
-                  'Morning, evening, and aarti audio for steady daily devotion.',
+              title: appText(context, 'Satsang', 'सत्संग'),
+              subtitle: appText(
+                context,
+                'Morning, evening, and aarti audio for steady daily devotion.',
+                'नियमित भक्ति के लिए प्रातः, शाम और आरती का ऑडियो।',
+              ),
             ),
             _SessionSwitch(
                 selected: selectedSession, onChanged: onSessionChanged),
             ...visibleTracks.map((track) {
+              final displayTrack = localizedSatsangTrack(context, track);
               final task = _routineTaskForSatsangSession(track.session);
               final done = task != null && today[task.name] == true;
               final active = activeTrackId == track.id;
@@ -2786,7 +4351,7 @@ class _SatsangScreen extends StatelessWidget {
                   : 0.0;
 
               return _AudioCard(
-                track: track,
+                track: displayTrack,
                 done: done,
                 active: active,
                 playing: active && isPlaying,
@@ -2846,7 +4411,7 @@ class _SessionSwitch extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      _satsangSessionLabel(session),
+                      _satsangSessionLabel(context, session),
                       style: TextStyle(
                         color: active ? AppColors.cream : AppColors.maroon,
                         fontSize: 17,
@@ -2920,7 +4485,7 @@ class _AudioCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _satsangSessionEyebrow(track.session),
+                      _satsangSessionEyebrow(context, track.session),
                       style: const TextStyle(
                         color: AppColors.gold,
                         fontSize: 15,
@@ -2970,7 +4535,9 @@ class _AudioCard extends StatelessWidget {
                   onPressed: onPlay,
                   icon: Icon(
                       playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                  label: Text(playing ? 'Pause' : 'Play'),
+                  label: Text(playing
+                      ? appText(context, 'Pause', 'रोकें')
+                      : appText(context, 'Play', 'चलाएं')),
                   style:
                       FilledButton.styleFrom(backgroundColor: AppColors.maroon),
                 ),
@@ -2983,7 +4550,9 @@ class _AudioCard extends StatelessWidget {
                     icon: Icon(done
                         ? Icons.verified_rounded
                         : Icons.check_circle_outline_rounded),
-                    label: Text(done ? 'Completed' : 'Complete'),
+                    label: Text(done
+                        ? appText(context, 'Completed', 'पूर्ण')
+                        : appText(context, 'Complete', 'पूर्ण करें')),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: done ? AppColors.sage : AppColors.maroon,
                     ),
@@ -3039,25 +4608,28 @@ class _MeditationScreen extends StatelessWidget {
     final chantPlaying = meditationChantPhase != null;
     final locked = meditationRunning || chantPlaying;
     final statusLabel = meditationChantPhase == MeditationChantPhase.closing
-        ? 'Completion chime'
+        ? appText(context, 'Completion chime', 'समापन चाइम')
         : meditationRunning
-            ? 'Meditating'
+            ? appText(context, 'Meditating', 'ध्यान जारी')
             : meditationComplete
-                ? 'Complete'
-                : 'Ready';
+                ? appText(context, 'Complete', 'पूर्ण')
+                : appText(context, 'Ready', 'तैयार');
     final actionLabel = meditationChantPhase == MeditationChantPhase.closing
-        ? 'Completion chime'
+        ? appText(context, 'Completion chime', 'समापन चाइम')
         : meditationRunning
-            ? 'Pause'
-            : 'Start';
+            ? appText(context, 'Pause', 'रोकें')
+            : appText(context, 'Start', 'शुरू करें');
 
     return _PageScaffold(
       children: [
-        const _ScreenTitle(
+        _ScreenTitle(
           icon: Icons.self_improvement_rounded,
-          title: 'Meditation',
-          subtitle:
-              'Set your duration. The chime plays only when the timer ends.',
+          title: appText(context, 'Meditation', 'ध्यान'),
+          subtitle: appText(
+            context,
+            'Set your duration. The chime plays only when the timer ends.',
+            'अपना समय चुनें। चाइम केवल टाइमर समाप्त होने पर बजेगा।',
+          ),
         ),
         Container(
           padding: const EdgeInsets.all(22),
@@ -3146,7 +4718,7 @@ class _MeditationScreen extends StatelessWidget {
                     final active = !customDurationSelected &&
                         selectedDurationSeconds == minutes * 60;
                     return ChoiceChip(
-                      label: Text('$minutes min'),
+                      label: Text(_formatMinutesLabel(context, minutes)),
                       selected: active,
                       onSelected: locked
                           ? null
@@ -3173,8 +4745,8 @@ class _MeditationScreen extends StatelessWidget {
                     ),
                     label: Text(customDurationSelected
                         ? _formatDurationLabel(
-                            Duration(seconds: selectedDurationSeconds))
-                        : 'Custom time'),
+                            context, Duration(seconds: selectedDurationSeconds))
+                        : appText(context, 'Custom time', 'अपना समय')),
                     selected: customDurationSelected,
                     onSelected: locked ? null : (_) => onCustomDuration(),
                     selectedColor: AppColors.maroon,
@@ -3226,7 +4798,7 @@ class _MeditationScreen extends StatelessWidget {
                     child: FilledButton.tonalIcon(
                       onPressed: onReset,
                       icon: const Icon(Icons.restart_alt_rounded),
-                      label: const Text('Reset'),
+                      label: Text(appText(context, 'Reset', 'रीसेट')),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(58),
                         textStyle: const TextStyle(
@@ -3238,7 +4810,13 @@ class _MeditationScreen extends StatelessWidget {
               ),
               if (todayDone) ...[
                 const SizedBox(height: 18),
-                const _CompletionBanner(text: 'Meditation completed today'),
+                _CompletionBanner(
+                  text: appText(
+                    context,
+                    'Meditation completed today',
+                    'आज का ध्यान पूर्ण हुआ',
+                  ),
+                ),
               ],
             ],
           ),
@@ -3265,9 +4843,9 @@ class _MantraLoopSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = enabled
         ? playing
-            ? 'Playing in loop'
-            : 'Starting'
-        : '417Hz mantra ambience';
+            ? appText(context, 'Playing in loop', 'लूप में चल रहा है')
+            : appText(context, 'Starting', 'शुरू हो रहा है')
+        : appText(context, '417Hz mantra ambience', '417Hz मंत्र वातावरण');
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -3309,7 +4887,7 @@ class _MantraLoopSwitch extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Om mantra',
+                  appText(context, 'Om mantra', 'ॐ मंत्र'),
                   style: Theme.of(context)
                       .textTheme
                       .titleLarge
@@ -3393,8 +4971,13 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Custom meditation time',
-                          style: GoogleFonts.lora(
+                          appText(
+                            context,
+                            'Custom meditation time',
+                            'अपना ध्यान समय',
+                          ),
+                          style: _headingStyle(
+                            LanguageScope.of(context).language,
                             color: AppColors.ink,
                             fontSize: 24,
                             fontWeight: FontWeight.w900,
@@ -3405,7 +4988,7 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Close',
+                        tooltip: appText(context, 'Close', 'बंद करें'),
                       ),
                     ],
                   ),
@@ -3425,8 +5008,9 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            _formatDurationLabel(duration),
-                            style: GoogleFonts.inter(
+                            _formatDurationLabel(context, duration),
+                            style: _bodyStyle(
+                              LanguageScope.of(context).language,
                               color: AppColors.maroon,
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
@@ -3468,7 +5052,7 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Cancel'),
+                          child: Text(appText(context, 'Cancel', 'रद्द करें')),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -3476,7 +5060,8 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                         child: FilledButton.icon(
                           onPressed: () => Navigator.of(context).pop(duration),
                           icon: const Icon(Icons.check_rounded),
-                          label: const Text('Set time'),
+                          label: Text(
+                              appText(context, 'Set time', 'समय सेट करें')),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.maroon,
                           ),
@@ -3552,18 +5137,25 @@ class _WisdomScreen extends StatelessWidget {
       initialData: fallbackQuotes,
       builder: (context, snapshot) {
         final quotes = snapshot.data ?? fallbackQuotes;
-        final quote = quotes[DateTime.now().day % quotes.length];
+        final quote = localizedWisdomQuote(
+            context, quotes[DateTime.now().day % quotes.length]);
 
         return _PageScaffold(
           children: [
-            const _ScreenTitle(
+            _ScreenTitle(
               icon: Icons.format_quote_rounded,
-              title: 'Daily Wisdom',
-              subtitle: 'Short reflections from Sadguru Maharaj.',
+              title: appText(context, 'Daily Wisdom', 'दैनिक ज्ञान'),
+              subtitle: appText(
+                context,
+                'Short reflections from Sadguru Maharaj.',
+                'सद्गुरु महाराज के छोटे प्रेरक विचार।',
+              ),
             ),
             _WisdomFeature(quote: quote),
             ...quotes.map(
-              (item) => _WisdomQuoteCard(quote: item),
+              (item) => _WisdomQuoteCard(
+                quote: localizedWisdomQuote(context, item),
+              ),
             ),
           ],
         );
@@ -3632,16 +5224,59 @@ class _MoreScreen extends StatelessWidget {
   });
 
   final User? user;
-  final VoidCallback onSignOut;
+  final Future<void> Function() onSignOut;
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.logout_rounded,
+          color: AppColors.maroon,
+          size: 34,
+        ),
+        title: Text(
+          appText(context, 'Sign out?', 'साइन आउट करें?'),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          appText(
+            context,
+            'You will return to the Guruvandan sign-in page.',
+            'आप गुरुवंदन के साइन-इन पेज पर वापस जाएंगे।',
+          ),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(appText(context, 'Cancel', 'रद्द करें')),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.logout_rounded),
+            label: Text(appText(context, 'Sign out', 'साइन आउट')),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) await onSignOut();
+  }
 
   @override
   Widget build(BuildContext context) {
     return _PageScaffold(
       children: [
-        const _ScreenTitle(
+        _ScreenTitle(
           icon: Icons.tune_rounded,
-          title: 'More',
-          subtitle: 'Upcoming modules and personal settings.',
+          title: appText(context, 'More', 'अधिक'),
+          subtitle: appText(
+            context,
+            'Upcoming modules and personal settings.',
+            'आने वाले मॉड्यूल और व्यक्तिगत सेटिंग्स।',
+          ),
         ),
         Container(
           padding: const EdgeInsets.all(22),
@@ -3669,13 +5304,18 @@ class _MoreScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'A gentle daily companion for satsang, meditation, wisdom, and routine streaks.',
+                appText(
+                  context,
+                  'A gentle daily companion for satsang, meditation, wisdom, and routine streaks.',
+                  'सत्संग, ध्यान, ज्ञान और दिनचर्या स्ट्रीक का सरल दैनिक साथी।',
+                ),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],
           ),
         ),
+        const _LanguageSettingsCard(),
         const _ComingSoonModules(),
         if (user != null)
           Container(
@@ -3684,22 +5324,110 @@ class _MoreScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Account', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  appText(context, 'Account', 'खाता'),
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   _userLabel(user!),
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: onSignOut,
-                  icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Sign out'),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmSignOut(context),
+                    icon: const Icon(Icons.logout_rounded),
+                    label: Text(appText(context, 'Sign out', 'साइन आउट')),
+                  ),
                 ),
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class _LanguageSettingsCard extends StatelessWidget {
+  const _LanguageSettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = LanguageScope.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: _cardDecoration(color: AppColors.offWhite),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _IconBadge(
+                icon: Icons.translate_rounded,
+                background: AppColors.rose,
+                color: AppColors.maroon,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      appText(context, 'Language', 'भाषा'),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      appText(
+                        context,
+                        'Choose the app language.',
+                        'ऐप की भाषा चुनें।',
+                      ),
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontSize: 16,
+                            height: 1.28,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<AppLanguage>(
+              segments: [
+                ButtonSegment(
+                  value: AppLanguage.english,
+                  icon: const Icon(Icons.language_rounded),
+                  label: Text(appText(context, 'English', 'अंग्रेज़ी')),
+                ),
+                ButtonSegment(
+                  value: AppLanguage.hindi,
+                  icon: const Icon(Icons.translate_rounded),
+                  label: Text(appText(context, 'Hindi', 'हिंदी')),
+                ),
+              ],
+              selected: {scope.language},
+              onSelectionChanged: (value) => scope.onChanged(value.first),
+              style: ButtonStyle(
+                visualDensity: VisualDensity.comfortable,
+                textStyle: WidgetStatePropertyAll(
+                  _bodyStyle(
+                    scope.language,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3712,7 +5440,7 @@ class _ComingSoonModules extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SectionHeader(title: 'Modules'),
+        _SectionHeader(title: appText(context, 'Modules', 'मॉड्यूल')),
         LayoutBuilder(
           builder: (context, constraints) {
             final twoColumns = constraints.maxWidth >= 560;
@@ -3724,29 +5452,45 @@ class _ComingSoonModules extends StatelessWidget {
             return Wrap(
               spacing: spacing,
               runSpacing: spacing,
-              children: const [
+              children: [
                 _ComingSoonModuleCard(
                   icon: Icons.shopping_bag_outlined,
-                  title: 'Shop',
-                  subtitle: 'Devotional items and books',
+                  title: appText(context, 'Shop', 'दुकान'),
+                  subtitle: appText(
+                    context,
+                    'Devotional items and books',
+                    'भक्ति सामग्री और पुस्तकें',
+                  ),
                   accentColor: AppColors.gold,
                 ),
                 _ComingSoonModuleCard(
                   icon: Icons.event_available_rounded,
-                  title: 'Events',
-                  subtitle: 'Satsang dates and community gatherings',
+                  title: appText(context, 'Events', 'कार्यक्रम'),
+                  subtitle: appText(
+                    context,
+                    'Satsang dates and community gatherings',
+                    'सत्संग तिथियां और सामुदायिक मिलन',
+                  ),
                   accentColor: AppColors.sage,
                 ),
                 _ComingSoonModuleCard(
                   icon: Icons.photo_library_rounded,
-                  title: 'Guru Gallery',
-                  subtitle: 'Sacred photos and memories',
+                  title: appText(context, 'Guru Gallery', 'गुरु गैलरी'),
+                  subtitle: appText(
+                    context,
+                    'Sacred photos and memories',
+                    'पावन चित्र और स्मृतियां',
+                  ),
                   accentColor: AppColors.river,
                 ),
                 _ComingSoonModuleCard(
                   icon: Icons.question_answer_rounded,
-                  title: 'Jigyasa',
-                  subtitle: 'Questions and guidance',
+                  title: appText(context, 'Jigyasa', 'जिज्ञासा'),
+                  subtitle: appText(
+                    context,
+                    'Questions and guidance',
+                    'प्रश्न और मार्गदर्शन',
+                  ),
                   accentColor: AppColors.maroon,
                 ),
               ].map((card) => SizedBox(width: cardWidth, child: card)).toList(),
@@ -3813,8 +5557,8 @@ class _ComingSoonModuleCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: const Text(
-                  'Coming soon',
+                child: Text(
+                  appText(context, 'Coming soon', 'जल्द आ रहा है'),
                   style: TextStyle(
                     color: AppColors.maroon,
                     fontSize: 12,
@@ -3870,9 +5614,12 @@ class _AdminRoute extends StatelessWidget {
         }
 
         if (snapshot.data == null) {
-          return const _SignInScreen(
-            initialStatus:
-                'Admin access: sign in with the authorized Guruvandan admin account.',
+          return _SignInScreen(
+            initialStatus: appText(
+              context,
+              'Admin access: sign in with the authorized Guruvandan admin account.',
+              'एडमिन प्रवेश: अधिकृत गुरुवंदन एडमिन खाते से साइन इन करें।',
+            ),
           );
         }
 
@@ -3902,8 +5649,10 @@ class _AdminConsoleState extends State<AdminConsole> {
   final title = TextEditingController();
   final description = TextEditingController();
   final duration = TextEditingController(text: '05:00');
-  final quote = TextEditingController();
-  final author = TextEditingController(text: 'Sadguru Maharaj');
+  final quoteEnglish = TextEditingController();
+  final quoteHindi = TextEditingController();
+  final authorEnglish = TextEditingController(text: 'Sadguru Maharaj');
+  final authorHindi = TextEditingController(text: 'सद्गुरु महाराज');
 
   SatsangSession session = SatsangSession.morning;
   PlatformFile? pickedFile;
@@ -3917,14 +5666,20 @@ class _AdminConsoleState extends State<AdminConsole> {
     title.dispose();
     description.dispose();
     duration.dispose();
-    quote.dispose();
-    author.dispose();
+    quoteEnglish.dispose();
+    quoteHindi.dispose();
+    authorEnglish.dispose();
+    authorHindi.dispose();
     super.dispose();
   }
 
   Future<void> _signIn() async {
     if (!widget.firebaseReady) {
-      setState(() => status = 'Firebase is not configured yet.');
+      setState(() => status = appText(
+            context,
+            'Firebase is not configured yet.',
+            'Firebase अभी कॉन्फ़िगर नहीं है।',
+          ));
       return;
     }
 
@@ -3934,7 +5689,11 @@ class _AdminConsoleState extends State<AdminConsole> {
         email: email.text.trim(),
         password: password.text,
       );
-      setState(() => status = 'Signed in.');
+      setState(() => status = appText(
+            context,
+            'Signed in.',
+            'साइन इन हो गया।',
+          ));
     } on FirebaseAuthException catch (error) {
       setState(() => status = error.message ?? 'Sign in failed.');
     } finally {
@@ -3955,7 +5714,11 @@ class _AdminConsoleState extends State<AdminConsole> {
 
   Future<void> _uploadAudio() async {
     if (pickedFile == null || title.text.trim().isEmpty) {
-      setState(() => status = 'Choose audio and enter a title.');
+      setState(() => status = appText(
+            context,
+            'Choose audio and enter a title.',
+            'ऑडियो चुनें और शीर्षक दर्ज करें।',
+          ));
       return;
     }
 
@@ -3973,7 +5736,11 @@ class _AdminConsoleState extends State<AdminConsole> {
       description.clear();
       setState(() {
         pickedFile = null;
-        status = 'Satsang uploaded.';
+        status = appText(
+          context,
+          'Satsang uploaded.',
+          'सत्संग अपलोड हो गया।',
+        );
       });
     } catch (error) {
       setState(() => status = error.toString());
@@ -3983,23 +5750,162 @@ class _AdminConsoleState extends State<AdminConsole> {
   }
 
   Future<void> _publishQuote() async {
-    if (quote.text.trim().isEmpty) {
-      setState(() => status = 'Write a quote first.');
+    if (quoteEnglish.text.trim().isEmpty || quoteHindi.text.trim().isEmpty) {
+      setState(() => status = appText(
+            context,
+            'Write the quote in both English and Hindi.',
+            'वचन अंग्रेजी और हिंदी दोनों में लिखें।',
+          ));
       return;
     }
 
     setState(() => busy = true);
     try {
       await widget.content.publishQuote(
-        quote.text.trim(),
-        author.text.trim().isEmpty ? 'Sadguru Maharaj' : author.text.trim(),
+        textEnglish: quoteEnglish.text.trim(),
+        textHindi: quoteHindi.text.trim(),
+        authorEnglish: authorEnglish.text.trim().isEmpty
+            ? 'Sadguru Maharaj'
+            : authorEnglish.text.trim(),
+        authorHindi: authorHindi.text.trim().isEmpty
+            ? 'सद्गुरु महाराज'
+            : authorHindi.text.trim(),
       );
-      quote.clear();
-      setState(() => status = 'Quote published.');
+      quoteEnglish.clear();
+      quoteHindi.clear();
+      setState(() => status = appText(
+            context,
+            'Quote published.',
+            'वचन प्रकाशित हो गया।',
+          ));
     } catch (error) {
       setState(() => status = error.toString());
     } finally {
       setState(() => busy = false);
+    }
+  }
+
+  Future<void> _editQuote(WisdomQuote item) async {
+    final englishText = TextEditingController(text: item.text);
+    final hindiText = TextEditingController(text: item.textHindi);
+    final englishAuthor = TextEditingController(text: item.author);
+    final hindiAuthor = TextEditingController(text: item.authorHindi);
+    final formKey = GlobalKey<FormState>();
+
+    final draft = await showDialog<_QuoteDraft>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.edit_note_rounded, color: AppColors.maroon),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(appText(
+                context,
+                'Edit quote',
+                'वचन संपादित करें',
+              )),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: englishText,
+                    minLines: 4,
+                    maxLines: 7,
+                    decoration: _inputDecoration('Quote in English'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'English quote is required.'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: hindiText,
+                    minLines: 4,
+                    maxLines: 7,
+                    decoration: _inputDecoration('हिंदी में वचन'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'हिंदी वचन आवश्यक है।'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: englishAuthor,
+                    decoration: _inputDecoration('Attribution in English'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: hindiAuthor,
+                    decoration: _inputDecoration('हिंदी में श्रेय'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(appText(context, 'Cancel', 'रद्द करें')),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              if (formKey.currentState?.validate() != true) return;
+              Navigator.pop(
+                dialogContext,
+                _QuoteDraft(
+                  textEnglish: englishText.text.trim(),
+                  textHindi: hindiText.text.trim(),
+                  authorEnglish: englishAuthor.text.trim().isEmpty
+                      ? 'Sadguru Maharaj'
+                      : englishAuthor.text.trim(),
+                  authorHindi: hindiAuthor.text.trim().isEmpty
+                      ? 'सद्गुरु महाराज'
+                      : hindiAuthor.text.trim(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.save_rounded),
+            label: Text(appText(context, 'Save changes', 'बदलाव सहेजें')),
+          ),
+        ],
+      ),
+    );
+
+    englishText.dispose();
+    hindiText.dispose();
+    englishAuthor.dispose();
+    hindiAuthor.dispose();
+    if (draft == null || !mounted) return;
+
+    setState(() => busy = true);
+    try {
+      await widget.content.updateQuote(
+        id: item.id,
+        textEnglish: draft.textEnglish,
+        textHindi: draft.textHindi,
+        authorEnglish: draft.authorEnglish,
+        authorHindi: draft.authorHindi,
+      );
+      if (mounted) {
+        setState(() => status = appText(
+              context,
+              'Quote updated.',
+              'वचन अपडेट हो गया।',
+            ));
+      }
+    } catch (error) {
+      if (mounted) setState(() => status = error.toString());
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -4008,12 +5914,16 @@ class _AdminConsoleState extends State<AdminConsole> {
     return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: AppBar(
-        title: const Text('Guruvandan Admin'),
+        title: Text(appText(
+          context,
+          'Guruvandan Admin',
+          'गुरुवंदन एडमिन',
+        )),
         actions: [
           IconButton(
             onPressed: () => FirebaseAuth.instance.signOut(),
             icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Sign out',
+            tooltip: appText(context, 'Sign out', 'साइन आउट'),
           ),
         ],
       ),
@@ -4029,28 +5939,39 @@ class _AdminConsoleState extends State<AdminConsole> {
               return _PageScaffold(
                 maxWidth: 560,
                 children: [
-                  const _ScreenTitle(
+                  _ScreenTitle(
                     icon: Icons.admin_panel_settings_rounded,
-                    title: 'Admin Sign In',
-                    subtitle:
-                        'Upload satsang audio and publish Sadguru quotes.',
+                    title: appText(context, 'Admin Sign In', 'एडमिन साइन इन'),
+                    subtitle: appText(
+                      context,
+                      'Upload satsang audio and publish Sadguru quotes.',
+                      'सत्संग ऑडियो अपलोड करें और सद्गुरु वचन प्रकाशित करें।',
+                    ),
                   ),
                   _AdminCard(
                     children: [
                       TextField(
                           controller: email,
-                          decoration: _inputDecoration('Admin email')),
+                          decoration: _inputDecoration(
+                            appText(context, 'Admin email', 'एडमिन ईमेल'),
+                          )),
                       const SizedBox(height: 12),
                       TextField(
                         controller: password,
                         obscureText: true,
-                        decoration: _inputDecoration('Password'),
+                        decoration: _inputDecoration(
+                          appText(context, 'Password', 'पासवर्ड'),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         onPressed: busy ? null : _signIn,
                         icon: const Icon(Icons.lock_open_rounded),
-                        label: const Text('Open console'),
+                        label: Text(appText(
+                          context,
+                          'Open console',
+                          'कंसोल खोलें',
+                        )),
                       ),
                       if (status.isNotEmpty) _StatusText(status),
                     ],
@@ -4067,11 +5988,18 @@ class _AdminConsoleState extends State<AdminConsole> {
                   return _PageScaffold(
                     maxWidth: 680,
                     children: [
-                      const _ScreenTitle(
+                      _ScreenTitle(
                         icon: Icons.block_rounded,
-                        title: 'Access not enabled',
-                        subtitle:
-                            'This account signed in but is not listed as an admin.',
+                        title: appText(
+                          context,
+                          'Access not enabled',
+                          'प्रवेश सक्षम नहीं है',
+                        ),
+                        subtitle: appText(
+                          context,
+                          'This account signed in but is not listed as an admin.',
+                          'यह खाता साइन इन है लेकिन एडमिन सूची में नहीं है।',
+                        ),
                       ),
                       _AdminCard(
                         children: [
@@ -4090,8 +6018,12 @@ class _AdminConsoleState extends State<AdminConsole> {
                   children: [
                     _ScreenTitle(
                       icon: Icons.dashboard_customize_rounded,
-                      title: 'Admin Console',
-                      subtitle: 'Signed in as ${user.email}',
+                      title: appText(context, 'Admin Console', 'एडमिन कंसोल'),
+                      subtitle: appText(
+                        context,
+                        'Signed in as ${user.email}',
+                        '${user.email} से साइन इन',
+                      ),
                     ),
                     LayoutBuilder(
                       builder: (context, constraints) {
@@ -4118,6 +6050,8 @@ class _AdminConsoleState extends State<AdminConsole> {
                               );
                       },
                     ),
+                    const SizedBox(height: 2),
+                    _quoteManager(),
                     if (status.isNotEmpty) _StatusText(status),
                   ],
                 );
@@ -4131,72 +6065,339 @@ class _AdminConsoleState extends State<AdminConsole> {
 
   List<Widget> _audioForm() {
     return [
-      Text('Upload satsang', style: Theme.of(context).textTheme.titleLarge),
+      Text(
+        appText(context, 'Upload satsang', 'सत्संग अपलोड करें'),
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
       const SizedBox(height: 14),
       SegmentedButton<SatsangSession>(
-        segments: const [
+        segments: [
           ButtonSegment(
               value: SatsangSession.morning,
-              label: Text('Morning'),
-              icon: Icon(Icons.wb_sunny_rounded)),
+              label: Text(appText(context, 'Morning', 'प्रातः')),
+              icon: const Icon(Icons.wb_sunny_rounded)),
           ButtonSegment(
               value: SatsangSession.evening,
-              label: Text('Evening'),
-              icon: Icon(Icons.nights_stay_rounded)),
+              label: Text(appText(context, 'Evening', 'शाम')),
+              icon: const Icon(Icons.nights_stay_rounded)),
           ButtonSegment(
               value: SatsangSession.aarti,
-              label: Text('Aarti'),
-              icon: Icon(Icons.local_fire_department_rounded)),
+              label: Text(appText(context, 'Aarti', 'आरती')),
+              icon: const Icon(Icons.local_fire_department_rounded)),
         ],
         selected: {session},
         onSelectionChanged: (value) => setState(() => session = value.first),
       ),
       const SizedBox(height: 12),
-      TextField(controller: title, decoration: _inputDecoration('Title')),
+      TextField(
+        controller: title,
+        decoration: _inputDecoration(appText(context, 'Title', 'शीर्षक')),
+      ),
       const SizedBox(height: 12),
       TextField(
           controller: description,
-          decoration: _inputDecoration('Description'),
+          decoration:
+              _inputDecoration(appText(context, 'Description', 'विवरण')),
           minLines: 3,
           maxLines: 5),
       const SizedBox(height: 12),
       TextField(
           controller: duration,
-          decoration: _inputDecoration('Duration label, e.g. 12:30')),
+          decoration: _inputDecoration(appText(
+            context,
+            'Duration label, e.g. 12:30',
+            'समय लेबल, जैसे 12:30',
+          ))),
       const SizedBox(height: 12),
       OutlinedButton.icon(
         onPressed: busy ? null : _pickAudio,
         icon: const Icon(Icons.audio_file_rounded),
-        label: Text(pickedFile == null ? 'Choose audio' : pickedFile!.name),
+        label: Text(pickedFile == null
+            ? appText(context, 'Choose audio', 'ऑडियो चुनें')
+            : pickedFile!.name),
       ),
       const SizedBox(height: 16),
       FilledButton.icon(
         onPressed: busy ? null : _uploadAudio,
         icon: const Icon(Icons.cloud_upload_rounded),
-        label: const Text('Upload satsang'),
+        label: Text(appText(context, 'Upload satsang', 'सत्संग अपलोड करें')),
       ),
     ];
   }
 
   List<Widget> _quoteForm() {
     return [
-      Text('Publish quote', style: Theme.of(context).textTheme.titleLarge),
+      Text(
+        appText(
+            context, 'Publish bilingual quote', 'द्विभाषी वचन प्रकाशित करें'),
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
+      const SizedBox(height: 6),
+      Text(
+        appText(
+          context,
+          'Both versions are required so every devotee sees the quote in their chosen language.',
+          'दोनों भाषाएं आवश्यक हैं, ताकि हर भक्त को चुनी हुई भाषा में वचन दिखे।',
+        ),
+        style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 15),
+      ),
       const SizedBox(height: 14),
       TextField(
-          controller: quote,
-          decoration: _inputDecoration('Sadguru quote'),
-          minLines: 7,
-          maxLines: 10),
+        controller: quoteEnglish,
+        decoration: _inputDecoration('Quote in English'),
+        minLines: 4,
+        maxLines: 7,
+      ),
       const SizedBox(height: 12),
       TextField(
-          controller: author, decoration: _inputDecoration('Attribution')),
+        controller: quoteHindi,
+        decoration: _inputDecoration('हिंदी में वचन'),
+        minLines: 4,
+        maxLines: 7,
+      ),
+      const SizedBox(height: 12),
+      TextField(
+        controller: authorEnglish,
+        decoration: _inputDecoration('Attribution in English'),
+      ),
+      const SizedBox(height: 12),
+      TextField(
+        controller: authorHindi,
+        decoration: _inputDecoration('हिंदी में श्रेय'),
+      ),
       const SizedBox(height: 16),
       FilledButton.icon(
         onPressed: busy ? null : _publishQuote,
         icon: const Icon(Icons.format_quote_rounded),
-        label: const Text('Publish quote'),
+        label: Text(appText(context, 'Publish quote', 'वचन प्रकाशित करें')),
       ),
     ];
+  }
+
+  Widget _quoteManager() {
+    return StreamBuilder<List<WisdomQuote>>(
+      stream: widget.content.adminQuotes(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const _AdminCard(
+            children: [
+              Center(child: CircularProgressIndicator()),
+            ],
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _AdminCard(
+            children: [
+              Text(
+                appText(
+                  context,
+                  'Quotes could not be loaded. Check the Firebase database rules.',
+                  'वचन लोड नहीं हो सके। Firebase डेटाबेस नियम जांचें।',
+                ),
+                style: const TextStyle(color: AppColors.crimson),
+              ),
+            ],
+          );
+        }
+
+        final quotes = snapshot.data ?? const <WisdomQuote>[];
+        return _AdminCard(
+          children: [
+            Row(
+              children: [
+                const _IconBadge(
+                  icon: Icons.library_books_rounded,
+                  background: AppColors.rose,
+                  color: AppColors.maroon,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        appText(context, 'Manage quotes', 'वचन प्रबंधित करें'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        appText(
+                          context,
+                          'Newest quotes are shown first.',
+                          'नवीनतम वचन सबसे पहले दिखाए गए हैं।',
+                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.copyWith(fontSize: 15),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.parchment,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${quotes.length}',
+                    style: const TextStyle(
+                      color: AppColors.maroon,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (quotes.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  appText(
+                    context,
+                    'No Firebase quotes yet. Publish the first one above.',
+                    'अभी Firebase में कोई वचन नहीं है। ऊपर पहला वचन प्रकाशित करें।',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              )
+            else
+              for (var index = 0; index < quotes.length; index++) ...[
+                _AdminQuoteListItem(
+                  quote: quotes[index],
+                  newest: index == 0,
+                  onEdit: busy ? null : () => _editQuote(quotes[index]),
+                ),
+                if (index != quotes.length - 1) const Divider(height: 28),
+              ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _QuoteDraft {
+  const _QuoteDraft({
+    required this.textEnglish,
+    required this.textHindi,
+    required this.authorEnglish,
+    required this.authorHindi,
+  });
+
+  final String textEnglish;
+  final String textHindi;
+  final String authorEnglish;
+  final String authorHindi;
+}
+
+class _AdminQuoteListItem extends StatelessWidget {
+  const _AdminQuoteListItem({
+    required this.quote,
+    required this.newest,
+    required this.onEdit,
+  });
+
+  final WisdomQuote quote;
+  final bool newest;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final timestamp = quote.createdAt == null
+        ? appText(context, 'Date unavailable', 'तिथि उपलब्ध नहीं')
+        : DateFormat('dd MMM yyyy, hh:mm a').format(
+            DateTime.fromMillisecondsSinceEpoch(quote.createdAt!).toLocal(),
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      timestamp,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (newest) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.rose,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          appText(context, 'Newest', 'नवीनतम'),
+                          style: const TextStyle(
+                            color: AppColors.maroon,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  quote.text,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '- ${quote.author}',
+                  style: const TextStyle(color: AppColors.taupe),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  quote.textHindi.trim().isEmpty
+                      ? 'हिंदी अनुवाद अभी दर्ज नहीं है।'
+                      : quote.textHindi,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: quote.textHindi.trim().isEmpty
+                            ? AppColors.crimson
+                            : AppColors.ink,
+                      ),
+                ),
+                if (quote.textHindi.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '- ${quote.authorHindi}',
+                    style: const TextStyle(color: AppColors.taupe),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          IconButton.filledTonal(
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_rounded),
+            tooltip: appText(context, 'Edit quote', 'वचन संपादित करें'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -4507,22 +6708,47 @@ class _AboutHomeSection extends StatelessWidget {
       'A sacred space for daily spiritual practice - satsang, meditation, '
       'Sadguru\'s wisdom and community of devotees, all in one place. Jai Guru.';
 
+  static const guruMaharajTextHindi =
+      'सद्गुरु महर्षि मेंही परमहंस भारत की संतमत परंपरा के अत्यंत सम्मानित '
+      'संतों और आध्यात्मिक आचार्यों में से एक थे। बिहार में जन्मे, उन्होंने '
+      'अपना जीवन आंतरिक ध्यान, आत्म-साक्षात्कार, सार्वभौमिक प्रेम और शांति '
+      'का संदेश फैलाने में समर्पित किया। उन्होंने सुरत शब्द योग के अभ्यास '
+      'पर बल दिया और सिखाया कि सच्ची आध्यात्मिकता जाति, धर्म और सामाजिक '
+      'भेदों से परे है।\n\n'
+      'अपने गहन लेखन, प्रवचनों और करुणामय मार्गदर्शन से उन्होंने लाखों '
+      'भक्तों को भक्ति, सरलता, नैतिकता और आध्यात्मिक जागरण के मार्ग पर '
+      'चलने की प्रेरणा दी। उनकी शिक्षाएं आज भी साधकों को आंतरिक शांति और '
+      'हर आत्मा में स्थित दिव्य चेतना की अनुभूति की ओर ले जाती हैं।';
+
+  static const guruVandanTextHindi =
+      'दैनिक आध्यात्मिक साधना के लिए एक पावन स्थान - सत्संग, ध्यान, '
+      'सद्गुरु की वाणी और भक्तों का समुदाय, सब एक जगह। जय गुरु।';
+
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       children: [
         _AboutAccordionCard(
-          title: 'ABOUT GURU MAHARAJ',
-          summary: 'Life, teachings, and the Sant Mat path',
-          body: guruMaharajText,
+          title:
+              appText(context, 'ABOUT GURU MAHARAJ', 'गुरु महाराज के बारे में'),
+          summary: appText(
+            context,
+            'Life, teachings, and the Sant Mat path',
+            'जीवन, शिक्षाएं और संतमत मार्ग',
+          ),
+          body: appText(context, guruMaharajText, guruMaharajTextHindi),
           accentColor: AppColors.maroon,
           icon: Icons.auto_awesome_rounded,
         ),
-        SizedBox(height: 14),
+        const SizedBox(height: 14),
         _AboutAccordionCard(
-          title: 'ABOUT GURU VANDAN',
-          summary: 'A sacred space for daily practice',
-          body: guruVandanText,
+          title: appText(context, 'ABOUT GURU VANDAN', 'गुरु वंदन के बारे में'),
+          summary: appText(
+            context,
+            'A sacred space for daily practice',
+            'दैनिक साधना का पावन स्थान',
+          ),
+          body: appText(context, guruVandanText, guruVandanTextHindi),
           accentColor: AppColors.gold,
           icon: Icons.volunteer_activism_rounded,
         ),
@@ -4639,47 +6865,6 @@ class _AboutAccordionCard extends StatelessWidget {
   }
 }
 
-class _MilestonePanel extends StatelessWidget {
-  const _MilestonePanel({required this.stats});
-
-  final RoutineStats stats;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(
-        color: const Color(0xFFEDF4ED),
-        borderColor: const Color(0xFFD6E3D6),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.flag_rounded, color: AppColors.sage, size: 34),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${stats.daysToMilestone} days to next milestone',
-                  style: const TextStyle(
-                    color: AppColors.sage,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text('Complete all three practices to grow your streak.',
-                    style: Theme.of(context).textTheme.bodyLarge),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CompletionBanner extends StatelessWidget {
   const _CompletionBanner({required this.text});
 
@@ -4757,6 +6942,8 @@ class _NavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final language = LanguageScope.of(context).language;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -4779,17 +6966,31 @@ class _NavBar extends StatelessWidget {
         elevation: 0,
         indicatorColor: AppColors.rose,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Home'),
+        destinations: [
           NavigationDestination(
-              icon: Icon(Icons.headphones_rounded), label: 'Satsang'),
+            icon: const Icon(Icons.home_rounded),
+            label: appText(context, 'Home', 'होम'),
+          ),
           NavigationDestination(
-              icon: Icon(Icons.timer_rounded), label: 'Meditate'),
+            icon: const Icon(Icons.headphones_rounded),
+            label: appText(context, 'Satsang', 'सत्संग'),
+          ),
           NavigationDestination(
-              icon: Icon(Icons.format_quote_rounded), label: 'Wisdom'),
+            icon: const Icon(Icons.timer_rounded),
+            label: appText(context, 'Meditate', 'ध्यान'),
+          ),
           NavigationDestination(
-              icon: Icon(Icons.more_horiz_rounded), label: 'More'),
+            icon: const Icon(Icons.format_quote_rounded),
+            label: appText(context, 'Wisdom', 'ज्ञान'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.more_horiz_rounded),
+            label: appText(context, 'More', 'अधिक'),
+          ),
         ],
+        labelTextStyle: WidgetStatePropertyAll(
+          _bodyStyle(language, fontSize: 13, fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }
@@ -4853,15 +7054,29 @@ Duration _minimumMeditationDuration(Duration duration) {
   return Duration(minutes: duration.inMinutes);
 }
 
-String _formatDurationLabel(Duration duration) {
+String _formatDurationLabel(BuildContext context, Duration duration) {
   final safe = _minimumMeditationDuration(duration);
   final totalMinutes = safe.inMinutes;
   final hours = totalMinutes ~/ 60;
   final minutes = totalMinutes % 60;
 
-  if (hours == 0) return '$minutes min';
-  if (minutes == 0) return hours == 1 ? '1 hr' : '$hours hr';
-  return '$hours hr $minutes min';
+  if (hours == 0) return _formatMinutesLabel(context, minutes);
+  if (minutes == 0) {
+    return appText(
+      context,
+      hours == 1 ? '1 hr' : '$hours hr',
+      '$hours घंटा',
+    );
+  }
+  return appText(
+    context,
+    '$hours hr $minutes min',
+    '$hours घंटा $minutes मिनट',
+  );
+}
+
+String _formatMinutesLabel(BuildContext context, int minutes) {
+  return appText(context, '$minutes min', '$minutes मिनट');
 }
 
 SatsangSession _satsangSessionFromValue(Object? value) {
@@ -4898,25 +7113,25 @@ IconData _satsangSessionIcon(SatsangSession session) {
   }
 }
 
-String _satsangSessionLabel(SatsangSession session) {
+String _satsangSessionLabel(BuildContext context, SatsangSession session) {
   switch (session) {
     case SatsangSession.morning:
-      return 'Morning';
+      return appText(context, 'Morning', 'प्रातः');
     case SatsangSession.evening:
-      return 'Evening';
+      return appText(context, 'Evening', 'शाम');
     case SatsangSession.aarti:
-      return 'Aarti';
+      return appText(context, 'Aarti', 'आरती');
   }
 }
 
-String _satsangSessionEyebrow(SatsangSession session) {
+String _satsangSessionEyebrow(BuildContext context, SatsangSession session) {
   switch (session) {
     case SatsangSession.morning:
-      return 'Morning satsang';
+      return appText(context, 'Morning satsang', 'प्रातः सत्संग');
     case SatsangSession.evening:
-      return 'Evening satsang';
+      return appText(context, 'Evening satsang', 'शाम सत्संग');
     case SatsangSession.aarti:
-      return 'Aarti';
+      return appText(context, 'Aarti', 'आरती');
   }
 }
 
