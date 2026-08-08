@@ -284,10 +284,7 @@ void main() {
       )?.displayName,
       'Ravi',
     );
-    await tester.tap(find.text('Home'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Jai Guru, Ravi'), findsOneWidget);
+    expect(find.text('Ravi Bhatnagar'), findsOneWidget);
   });
 
   testWidgets('Wisdom tab shows the current sacred quote library',

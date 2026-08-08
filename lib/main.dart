@@ -5477,6 +5477,41 @@ class _MoreScreen extends StatelessWidget {
               ),
               const _LanguageSettingsCard(),
               const _ComingSoonModules(),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: _cardDecoration(color: AppColors.offWhite),
+                child: Row(
+                  children: [
+                    const _IconBadge(
+                      icon: Icons.person_rounded,
+                      background: AppColors.rose,
+                      color: AppColors.maroon,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            profile.fullName,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          if (user != null)
+                            Text(
+                              _userLabel(context, user!),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(fontSize: 14),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               OutlinedButton.icon(
                 onPressed: () => _editName(context),
                 icon: const Icon(Icons.manage_accounts_rounded),
@@ -5496,25 +5531,6 @@ class _MoreScreen extends StatelessWidget {
                   backgroundColor: AppColors.maroon,
                 ),
               ),
-              if (user != null)
-                Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: _cardDecoration(color: AppColors.offWhite),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        appText(context, 'Your account', 'सदस्य-विवरण'),
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _userLabel(context, user!),
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
         ),
