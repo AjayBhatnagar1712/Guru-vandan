@@ -2291,7 +2291,9 @@ class _DevoteeShellState extends State<DevoteeShell>
     meditationTimer?.cancel();
     meditationEndsAt = null;
     await _stopBackgroundAudio();
-    await FirebaseAuth.instance.signOut();
+    if (widget.firebaseReady) {
+      await FirebaseAuth.instance.signOut();
+    }
   }
 
   Future<void> _playSatsang(SatsangTrack track) async {
@@ -3624,7 +3626,7 @@ class _HeroPanel extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 430;
         return Container(
-          height: compact ? 440 : 388,
+          height: compact ? 552 : 388,
           clipBehavior: Clip.antiAlias,
           decoration: _cardDecoration(
             color: AppColors.deepCrimson,
@@ -4510,7 +4512,7 @@ class _AudioCard extends StatelessWidget {
                         : Icons.check_circle_outline_rounded),
                     label: Text(done
                         ? appText(context, 'Done', 'पूर्ण')
-                        : appText(context, 'Complete', 'पूर्ण')),
+                        : appText(context, 'Mark', 'अंकित')),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: done ? AppColors.sage : AppColors.maroon,
                     ),
@@ -5237,85 +5239,105 @@ class _MoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _PageScaffold(
+    return Stack(
       children: [
-        _ScreenTitle(
-          icon: Icons.tune_rounded,
-          title: appText(context, 'Other', 'अन्य'),
-          subtitle: appText(
-            context,
-            'Language, your account, and sacred offerings arriving soon.',
-            'भाषा, सदस्य-विवरण और शीघ्र उपलब्ध होने वाले पावन अनुभाग।',
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: _cardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+        Positioned.fill(
+          child: _PageScaffold(
             children: [
-              Container(
-                width: 126,
-                height: 126,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.offWhite,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.borderStrong),
-                ),
-                child: Image.asset('assets/images/app_icon.png',
-                    fit: BoxFit.contain),
-              ),
-              const SizedBox(height: 22),
-              Text(
-                'Guruvandan',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                appText(
+              _ScreenTitle(
+                icon: Icons.tune_rounded,
+                title: appText(context, 'Other', 'अन्य'),
+                subtitle: appText(
                   context,
-                  'A serene companion for daily satsang, meditation, Sadguru wisdom, and steadfast spiritual practice.',
-                  'नित्य सत्संग, ध्यान, सद्गुरु-वाणी और अखंड साधना का शांत सहचर।',
+                  'Language, your account, and sacred offerings arriving soon.',
+                  'भाषा, सदस्य-विवरण और शीघ्र उपलब्ध होने वाले पावन अनुभाग।',
                 ),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
               ),
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: _cardDecoration(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 126,
+                      height: 126,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.offWhite,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.borderStrong),
+                      ),
+                      child: Image.asset('assets/images/app_icon.png',
+                          fit: BoxFit.contain),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      'Guruvandan',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      appText(
+                        context,
+                        'A serene companion for daily satsang, meditation, Sadguru wisdom, and steadfast spiritual practice.',
+                        'नित्य सत्संग, ध्यान, सद्गुरु-वाणी और अखंड साधना का शांत सहचर।',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ],
+                ),
+              ),
+              const _LanguageSettingsCard(),
+              const _ComingSoonModules(),
+              if (user != null)
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: _cardDecoration(color: AppColors.offWhite),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        appText(context, 'Your account', 'सदस्य-विवरण'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _userLabel(context, user!),
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
-        const _LanguageSettingsCard(),
-        const _ComingSoonModules(),
-        if (user != null)
-          Container(
-            padding: const EdgeInsets.all(22),
-            decoration: _cardDecoration(color: AppColors.offWhite),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  appText(context, 'Your account', 'सदस्य-विवरण'),
-                  style: Theme.of(context).textTheme.titleLarge,
+        Positioned(
+          left: 18,
+          right: 18,
+          bottom: 12,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => _confirmSignOut(context),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: Text(appText(context, 'Logout', 'प्रस्थान')),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(58),
+                    backgroundColor: AppColors.maroon,
+                    elevation: 8,
+                    shadowColor: AppColors.maroon.withValues(alpha: 0.24),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  _userLabel(context, user!),
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ],
+              ),
             ),
           ),
-        if (user != null)
-          FilledButton.icon(
-            onPressed: () => _confirmSignOut(context),
-            icon: const Icon(Icons.logout_rounded),
-            label: Text(appText(context, 'Logout', 'प्रस्थान')),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(58),
-              backgroundColor: AppColors.maroon,
-            ),
-          ),
+        ),
       ],
     );
   }
@@ -6838,6 +6860,7 @@ class _NavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final language = LanguageScope.of(context).language;
+    final compact = MediaQuery.sizeOf(context).width < 420;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -6872,7 +6895,7 @@ class _NavBar extends StatelessWidget {
           ),
           NavigationDestination(
             icon: const Icon(Icons.timer_rounded),
-            label: appText(context, 'Meditation', 'ध्यान'),
+            label: appText(context, 'Focus', 'ध्यान'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.format_quote_rounded),
@@ -6884,7 +6907,12 @@ class _NavBar extends StatelessWidget {
           ),
         ],
         labelTextStyle: WidgetStatePropertyAll(
-          _bodyStyle(language, fontSize: 13, fontWeight: FontWeight.w700),
+          _bodyStyle(
+            language,
+            fontSize: compact ? 11 : 13,
+            height: 1,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

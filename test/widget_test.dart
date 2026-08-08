@@ -222,6 +222,7 @@ void main() {
     expect(find.text('Guru Gallery'), findsOneWidget);
     expect(find.text('Questions & Guidance'), findsOneWidget);
     expect(find.text('Coming soon'), findsNWidgets(4));
+    expect(find.text('Logout'), findsOneWidget);
     expect(find.text('Admin content'), findsNothing);
     expect(find.text('Open admin console'), findsNothing);
   });
@@ -242,6 +243,25 @@ void main() {
     expect(find.text('गृह'), findsOneWidget);
     expect(find.text('Other'), findsNothing);
     expect(find.text('Sacred offerings'), findsNothing);
+  });
+
+  testWidgets('Bottom navigation stays aligned on a narrow phone',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpSavedHome(tester);
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Satsang'), findsOneWidget);
+    final meditationLabel = find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Focus'),
+    );
+    expect(meditationLabel, findsOneWidget);
+    expect(find.text('Wisdom'), findsOneWidget);
+    expect(find.text('Other'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Meditation start asks user to put phone on silent',
