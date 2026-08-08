@@ -398,15 +398,13 @@ class _FirstLaunchLanguageScreen extends StatelessWidget {
                       const SizedBox(height: 30),
                       _LanguageChoiceButton(
                         iconText: 'A',
-                        title: 'Continue in English',
-                        subtitle: 'English',
+                        title: 'English',
                         onTap: () => onSelected(AppLanguage.english),
                       ),
                       const SizedBox(height: 14),
                       _LanguageChoiceButton(
                         iconText: 'अ',
-                        title: 'हिन्दी में प्रवेश करें',
-                        subtitle: 'हिन्दी',
+                        title: 'हिन्दी',
                         hindi: true,
                         onTap: () => onSelected(AppLanguage.hindi),
                       ),
@@ -426,14 +424,12 @@ class _LanguageChoiceButton extends StatelessWidget {
   const _LanguageChoiceButton({
     required this.iconText,
     required this.title,
-    required this.subtitle,
     required this.onTap,
     this.hindi = false,
   });
 
   final String iconText;
   final String title;
-  final String subtitle;
   final VoidCallback onTap;
   final bool hindi;
 
@@ -491,22 +487,7 @@ class _LanguageChoiceButton extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: titleStyle),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: GoogleFonts.inter(
-                          color: AppColors.muted,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: Text(title, style: titleStyle),
                 ),
                 const Icon(
                   Icons.arrow_forward_rounded,
@@ -1714,8 +1695,8 @@ class _SignInScreenState extends State<_SignInScreen> {
                               const Icon(Icons.g_mobiledata_rounded, size: 31),
                           label: Text(appText(
                             context,
-                            'Continue with Google',
-                            'Google द्वारा प्रवेश',
+                            'Google',
+                            'Google',
                           )),
                           style: FilledButton.styleFrom(
                             minimumSize: const Size.fromHeight(58),
@@ -1780,10 +1761,8 @@ class _SignInScreenState extends State<_SignInScreen> {
                               ? Icons.verified_user_rounded
                               : Icons.sms_rounded),
                           label: Text(otpSent
-                              ? appText(
-                                  context, 'Verify OTP', 'कूट प्रमाणित करें')
-                              : appText(
-                                  context, 'Send OTP', 'कूट प्रेषित करें')),
+                              ? appText(context, 'Verify', 'प्रमाणित')
+                              : appText(context, 'Send', 'प्रेषित')),
                         ),
                         if (otpSent) ...[
                           const SizedBox(height: 10),
@@ -1801,8 +1780,8 @@ class _SignInScreenState extends State<_SignInScreen> {
                                   },
                             child: Text(appText(
                               context,
-                              'Use another phone number',
-                              'अन्य दूरभाष क्रमांक चुनें',
+                              'Change',
+                              'परिवर्तन',
                             )),
                           ),
                         ],
@@ -3066,7 +3045,7 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                   onPressed: _continue,
                   icon: const Icon(Icons.arrow_forward_rounded),
                   label: Text(
-                    appText(context, 'Begin the journey', 'साधना आरंभ करें'),
+                    appText(context, 'Begin', 'आरंभ'),
                   ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(58),
@@ -3252,8 +3231,7 @@ class _GuruWelcomeDialog extends StatelessWidget {
                               ),
                             ),
                             child: Text(
-                              appText(
-                                  context, 'Enter Guruvandan', 'प्रवेश करें'),
+                              appText(context, 'Enter', 'प्रवेश'),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -3730,8 +3708,7 @@ class _HeroPanel extends StatelessWidget {
                       children: [
                         _HeroChip(
                           icon: Icons.wb_sunny_rounded,
-                          label: appText(
-                              context, 'Morning satsang', 'प्रातः सत्संग'),
+                          label: appText(context, 'Morning', 'प्रातः'),
                           onTap: onMorningSatsang,
                         ),
                         _HeroChip(
@@ -3741,8 +3718,7 @@ class _HeroPanel extends StatelessWidget {
                         ),
                         _HeroChip(
                           icon: Icons.nights_stay_rounded,
-                          label: appText(
-                              context, 'Evening satsang', 'सायं सत्संग'),
+                          label: appText(context, 'Evening', 'सायं'),
                           onTap: onEveningSatsang,
                         ),
                       ],
@@ -4518,8 +4494,8 @@ class _AudioCard extends StatelessWidget {
                   icon: Icon(
                       playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
                   label: Text(playing
-                      ? appText(context, 'Pause listening', 'श्रवण विराम')
-                      : appText(context, 'Begin listening', 'श्रवण करें')),
+                      ? appText(context, 'Pause', 'विराम')
+                      : appText(context, 'Play', 'श्रवण')),
                   style:
                       FilledButton.styleFrom(backgroundColor: AppColors.maroon),
                 ),
@@ -4533,9 +4509,8 @@ class _AudioCard extends StatelessWidget {
                         ? Icons.verified_rounded
                         : Icons.check_circle_outline_rounded),
                     label: Text(done
-                        ? appText(context, 'Practice complete', 'साधना पूर्ण')
-                        : appText(
-                            context, 'Mark complete', 'पूर्ण अंकित करें')),
+                        ? appText(context, 'Done', 'पूर्ण')
+                        : appText(context, 'Complete', 'पूर्ण')),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: done ? AppColors.sage : AppColors.maroon,
                     ),
@@ -4599,10 +4574,10 @@ class _MeditationScreen extends StatelessWidget {
                 : appText(
                     context, 'Ready for stillness', 'अंतर्मौन हेतु तत्पर');
     final actionLabel = meditationChantPhase == MeditationChantPhase.closing
-        ? appText(context, 'Sacred closing chant', 'पावन समापन मंत्र')
+        ? appText(context, 'Chant', 'मंत्र')
         : meditationRunning
-            ? appText(context, 'Pause meditation', 'ध्यान विराम')
-            : appText(context, 'Begin meditation', 'ध्यान आरंभ करें');
+            ? appText(context, 'Pause', 'विराम')
+            : appText(context, 'Start', 'आरंभ');
 
     return _PageScaffold(
       children: [
@@ -4702,7 +4677,11 @@ class _MeditationScreen extends StatelessWidget {
                     final active = !customDurationSelected &&
                         selectedDurationSeconds == minutes * 60;
                     return ChoiceChip(
-                      label: Text(_formatMinutesLabel(context, minutes)),
+                      label: Text(appText(
+                        context,
+                        '${minutes}m',
+                        '$minutes मि.',
+                      )),
                       selected: active,
                       onSelected: locked
                           ? null
@@ -4730,8 +4709,7 @@ class _MeditationScreen extends StatelessWidget {
                     label: Text(customDurationSelected
                         ? _formatDurationLabel(
                             context, Duration(seconds: selectedDurationSeconds))
-                        : appText(
-                            context, 'Choose duration', 'स्वनिर्धारित अवधि')),
+                        : appText(context, 'Custom', 'स्वनिर्धारित')),
                     selected: customDurationSelected,
                     onSelected: locked ? null : (_) => onCustomDuration(),
                     selectedColor: AppColors.maroon,
@@ -4784,8 +4762,7 @@ class _MeditationScreen extends StatelessWidget {
                       onPressed: onReset,
                       icon: const Icon(Icons.restart_alt_rounded),
                       label: Text(
-                        appText(
-                            context, 'Restore time', 'अवधि पुनःस्थापित करें'),
+                        appText(context, 'Reset', 'पुनःस्थापन'),
                       ),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(58),
@@ -5052,8 +5029,7 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                         child: FilledButton.icon(
                           onPressed: () => Navigator.of(context).pop(duration),
                           icon: const Icon(Icons.check_rounded),
-                          label: Text(appText(
-                              context, 'Set duration', 'अवधि निर्धारित करें')),
+                          label: Text(appText(context, 'Set', 'निर्धारित')),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.maroon,
                           ),
@@ -5245,13 +5221,12 @@ class _MoreScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child:
-                Text(appText(context, 'Remain signed in', 'प्रवेश बनाए रखें')),
+            child: Text(appText(context, 'Stay', 'रहें')),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(dialogContext, true),
             icon: const Icon(Icons.logout_rounded),
-            label: Text(appText(context, 'Leave account', 'प्रस्थान')),
+            label: Text(appText(context, 'Logout', 'प्रस्थान')),
           ),
         ],
       ),
@@ -5328,16 +5303,17 @@ class _MoreScreen extends StatelessWidget {
                   _userLabel(context, user!),
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _confirmSignOut(context),
-                    icon: const Icon(Icons.logout_rounded),
-                    label: Text(appText(context, 'Leave account', 'प्रस्थान')),
-                  ),
-                ),
               ],
+            ),
+          ),
+        if (user != null)
+          FilledButton.icon(
+            onPressed: () => _confirmSignOut(context),
+            icon: const Icon(Icons.logout_rounded),
+            label: Text(appText(context, 'Logout', 'प्रस्थान')),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(58),
+              backgroundColor: AppColors.maroon,
             ),
           ),
       ],
@@ -5847,8 +5823,7 @@ class _AdminConsoleState extends State<AdminConsole> {
               );
             },
             icon: const Icon(Icons.save_rounded),
-            label: Text(
-                appText(context, 'Save changes', 'परिवर्तन सुरक्षित करें')),
+            label: Text(appText(context, 'Save', 'सुरक्षित')),
           ),
         ],
       ),
@@ -5947,11 +5922,7 @@ class _AdminConsoleState extends State<AdminConsole> {
                       FilledButton.icon(
                         onPressed: busy ? null : _signIn,
                         icon: const Icon(Icons.lock_open_rounded),
-                        label: Text(appText(
-                          context,
-                          'Open administration',
-                          'प्रशासन-पटल खोलें',
-                        )),
+                        label: Text(appText(context, 'Open', 'खोलें')),
                       ),
                       if (status.isNotEmpty) _StatusText(status),
                     ],
@@ -6082,8 +6053,7 @@ class _AdminConsoleState extends State<AdminConsole> {
       FilledButton.icon(
         onPressed: busy ? null : _publishQuote,
         icon: const Icon(Icons.format_quote_rounded),
-        label: Text(
-            appText(context, 'Publish sacred quote', 'पावन वचन प्रकाशित करें')),
+        label: Text(appText(context, 'Publish', 'प्रकाशित')),
       ),
     ];
   }
@@ -6906,7 +6876,7 @@ class _NavBar extends StatelessWidget {
           ),
           NavigationDestination(
             icon: const Icon(Icons.format_quote_rounded),
-            label: appText(context, 'Sadguru Word', 'सद्गुरु-वाणी'),
+            label: appText(context, 'Wisdom', 'वाणी'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.more_horiz_rounded),

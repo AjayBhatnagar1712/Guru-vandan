@@ -37,11 +37,11 @@ void main() {
 
     expect(find.text('Choose the language of your journey'), findsOneWidget);
     expect(find.text('अपने साधना-पथ की भाषा चुनें'), findsOneWidget);
-    expect(find.text('Continue in English'), findsOneWidget);
-    expect(find.text('हिन्दी में प्रवेश करें'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('हिन्दी'), findsOneWidget);
     expect(find.text('Welcome to Guruvandan'), findsNothing);
 
-    await tester.tap(find.text('Continue in English'));
+    await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome to Guruvandan'), findsOneWidget);
@@ -145,8 +145,8 @@ void main() {
     await tester.enterText(find.byType(EditableText).at(0), 'Ajay');
     await tester.enterText(find.byType(EditableText).at(1), 'Kumar');
     await tester.enterText(find.byType(EditableText).at(2), 'Bhatnagar');
-    await tester.ensureVisible(find.text('Begin the journey'));
-    await tester.tap(find.text('Begin the journey'));
+    await tester.ensureVisible(find.text('Begin'));
+    await tester.tap(find.text('Begin'));
     await tester.pumpAndSettle();
 
     expect(find.text('Jai Guru, Ajay!'), findsOneWidget);
@@ -169,7 +169,7 @@ void main() {
   testWidgets('Home hero morning chip opens morning satsang', (tester) async {
     await pumpSavedHome(tester);
 
-    await tester.tap(find.text('Morning satsang').first);
+    await tester.tap(find.text('Morning'));
     await tester.pumpAndSettle();
 
     expect(
@@ -183,7 +183,7 @@ void main() {
   testWidgets('Home hero evening chip opens evening satsang', (tester) async {
     await pumpSavedHome(tester);
 
-    await tester.tap(find.text('Evening satsang').first);
+    await tester.tap(find.text('Evening'));
     await tester.pumpAndSettle();
 
     expect(
@@ -253,7 +253,7 @@ void main() {
 
     await tester.tap(find.text('Meditation').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Begin meditation'));
+    await tester.tap(find.text('Start'));
     await tester.pumpAndSettle();
 
     expect(find.text('Prepare for sacred listening'), findsOneWidget);
