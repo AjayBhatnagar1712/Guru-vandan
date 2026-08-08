@@ -67,6 +67,40 @@ void main() {
     expect(quote.createdAt, 1234);
   });
 
+  test('Legacy Android user names are recognized as existing profiles', () {
+    final profile = DevoteeProfile.fromMap({
+      'name': 'Ravi Kumar',
+      'email': 'ravi@example.com',
+      'isProfileComplete': true,
+    });
+
+    expect(profile, isNotNull);
+    expect(profile!.firstName, 'Ravi');
+    expect(profile.lastName, 'Kumar');
+    expect(profile.fullName, 'Ravi Kumar');
+  });
+
+  test('Cloud user activity is parsed into meditation statistics', () {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final activity = DevoteeActivity.fromEntry('uid-1', {
+      'name': 'Ravi Kumar',
+      'email': 'ravi@example.com',
+      'routine': {
+        dateKey(now): {
+          'meditation': true,
+          'morningSatsang': true,
+        },
+        dateKey(yesterday): {'meditation': true},
+      },
+    });
+
+    expect(activity.name, 'Ravi Kumar');
+    expect(activity.meditationStats.current, 2);
+    expect(activity.meditationStats.total, 2);
+    expect(activity.count(RoutineTask.morningSatsang), 1);
+  });
+
   testWidgets('Guruvandan home renders with first name', (tester) async {
     SharedPreferences.setMockInitialValues({
       'guruvandan_flutter:name': 'Ajay Bhatnagar',
@@ -225,6 +259,54 @@ void main() {
     expect(find.text('Logout'), findsOneWidget);
     expect(find.text('Admin content'), findsNothing);
     expect(find.text('Open admin console'), findsNothing);
+  });
+
+  testWidgets('More tab can update the devotee first name', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Other'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Name'));
+    await tester.tap(find.text('Name'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('edit-first-name')), 'Ravi');
+    await tester.tap(find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.text('Save'),
+    ));
+    await tester.pumpAndSettle();
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      DevoteeProfile.fromStoredValue(
+        preferences.getString('guruvandan_flutter:name'),
+      )?.displayName,
+      'Ravi',
+    );
+    await tester.tap(find.text('Home'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jai Guru, Ravi'), findsOneWidget);
+  });
+
+  testWidgets('Wisdom tab shows the current sacred quote library',
+      (tester) async {
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Wisdom'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+          'Remember the Guru with a simple heart, and every step becomes worship.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+          'When the day opens and closes in satsang, the heart becomes gentle.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('More tab switches app language to Hindi', (tester) async {

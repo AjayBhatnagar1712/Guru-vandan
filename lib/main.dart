@@ -26,11 +26,11 @@ const _firebaseApiKey = String.fromEnvironment(
 const _firebaseWebOptions = FirebaseOptions(
   apiKey: String.fromEnvironment(
     'FIREBASE_API_KEY',
-    defaultValue: 'AIzaSyBDnC1IE0BImeYue5vaOicS4_Miw0Vd2xE',
+    defaultValue: 'AIzaSyDfp3ijzKvfGovXKAur63s5l2KUUdYaJtk',
   ),
   appId: String.fromEnvironment(
     'FIREBASE_WEB_APP_ID',
-    defaultValue: '1:540841544767:web:guruvandan-flutter',
+    defaultValue: '1:540841544767:web:f7c6730ac63bbdd8cebc8a',
   ),
   messagingSenderId: '540841544767',
   projectId: 'guru-vandan',
@@ -38,6 +38,7 @@ const _firebaseWebOptions = FirebaseOptions(
   databaseURL:
       'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/',
   storageBucket: 'guru-vandan.firebasestorage.app',
+  measurementId: 'G-67CCGE1TTQ',
 );
 
 const _firebaseAndroidOptions = FirebaseOptions(
@@ -605,11 +606,14 @@ class DevoteeProfile {
 
   static DevoteeProfile? fromMap(Object? value) {
     if (value is! Map) return null;
-    return fromParts(
+    final structured = fromParts(
       firstName: value['firstName']?.toString() ?? '',
       middleName: value['middleName']?.toString() ?? '',
       lastName: value['lastName']?.toString() ?? '',
     );
+    if (structured != null) return structured;
+
+    return fromStoredValue(value['name']?.toString());
   }
 
   static DevoteeProfile? fromParts({
@@ -754,6 +758,118 @@ class RoutineStats {
   final int best;
   final int total;
   final int daysToMilestone;
+}
+
+Map<String, Map<String, bool>> routineRecordsFromValue(Object? value) {
+  if (value is! Map) return {};
+
+  return value.map((date, rawTasks) {
+    if (rawTasks is! Map) {
+      return MapEntry(date.toString(), <String, bool>{});
+    }
+    return MapEntry(
+      date.toString(),
+      rawTasks.map(
+        (task, complete) => MapEntry(task.toString(), complete == true),
+      ),
+    );
+  });
+}
+
+RoutineStats routineStatsFromRecords(
+  Map<String, Map<String, bool>> records, {
+  DateTime? now,
+}) {
+  final completeKeys = records.entries
+      .where((entry) => entry.value[RoutineTask.meditation.name] == true)
+      .map((entry) => entry.key)
+      .where((key) => DateTime.tryParse(key) != null)
+      .toList()
+    ..sort();
+
+  var best = 0;
+  var run = 0;
+  DateTime? previous;
+  for (final key in completeKeys) {
+    final current = DateTime.parse(key);
+    if (previous != null && current.difference(previous).inDays == 1) {
+      run++;
+    } else {
+      run = 1;
+    }
+    best = max(best, run);
+    previous = current;
+  }
+
+  var cursor = now ?? DateTime.now();
+  String keyFor(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+  if (records[keyFor(cursor)]?[RoutineTask.meditation.name] != true) {
+    cursor = cursor.subtract(const Duration(days: 1));
+  }
+
+  var current = 0;
+  while (records[keyFor(cursor)]?[RoutineTask.meditation.name] == true) {
+    current++;
+    cursor = cursor.subtract(const Duration(days: 1));
+  }
+
+  const milestones = [7, 21, 40, 90, 108, 365];
+  final next = milestones.firstWhere(
+    (item) => item > current,
+    orElse: () => current + 108,
+  );
+  return RoutineStats(
+    current: current,
+    best: best,
+    total: completeKeys.length,
+    daysToMilestone: next - current,
+  );
+}
+
+class DevoteeActivity {
+  const DevoteeActivity({
+    required this.uid,
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.records,
+    this.lastActiveAt,
+  });
+
+  final String uid;
+  final String name;
+  final String email;
+  final String phone;
+  final Map<String, Map<String, bool>> records;
+  final int? lastActiveAt;
+
+  factory DevoteeActivity.fromEntry(String uid, Map<dynamic, dynamic> value) {
+    final profile = DevoteeProfile.fromMap(value['profile']) ??
+        DevoteeProfile.fromMap(value);
+    final name = profile?.fullName.trim().isNotEmpty == true
+        ? profile!.fullName
+        : (value['name'] ?? '').toString().trim();
+    return DevoteeActivity(
+      uid: uid,
+      name: name.isEmpty ? 'Devotee' : name,
+      email: (value['email'] ?? '').toString(),
+      phone: (value['phone'] ?? '').toString(),
+      records: routineRecordsFromValue(value['routine'] ?? value['records']),
+      lastActiveAt:
+          value['lastActiveAt'] is int ? value['lastActiveAt'] as int : null,
+    );
+  }
+
+  RoutineStats get meditationStats => routineStatsFromRecords(records);
+
+  int count(RoutineTask task) =>
+      records.values.where((day) => day[task.name] == true).length;
+
+  String get contact => email.trim().isNotEmpty
+      ? email.trim()
+      : phone.trim().isNotEmpty
+          ? phone.trim()
+          : uid;
 }
 
 const fallbackSatsangs = [
@@ -917,49 +1033,93 @@ class FirebaseContentService {
     return Stream.value(fallbackSatsangs);
   }
 
-  Stream<List<WisdomQuote>> quotes() {
-    if (!ready) return Stream.value(fallbackQuotes);
+  List<WisdomQuote> _quotesFromValue(
+    Object? value, {
+    required bool includeInactive,
+  }) {
+    final remote = value is Map
+        ? value.entries
+            .map((entry) {
+              if (entry.value is! Map) return null;
+              return WisdomQuote.fromEntry(
+                entry.key.toString(),
+                Map<dynamic, dynamic>.from(entry.value as Map),
+              );
+            })
+            .whereType<WisdomQuote>()
+            .where((item) =>
+                (includeInactive || item.active) &&
+                (item.text.trim().isNotEmpty ||
+                    item.textHindi.trim().isNotEmpty))
+            .toList()
+        : <WisdomQuote>[];
+    remote.sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
 
-    return FirebaseDatabase.instance.ref('quotes').onValue.map((event) {
-      final value = event.snapshot.value;
-      if (value is! Map) return fallbackQuotes;
-
-      final items = value.entries
-          .map((entry) {
-            if (entry.value is! Map) return null;
-            return WisdomQuote.fromEntry(entry.key.toString(),
-                Map<dynamic, dynamic>.from(entry.value as Map));
-          })
-          .whereType<WisdomQuote>()
-          .where((item) => item.active && item.text.trim().isNotEmpty)
-          .toList()
-        ..sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
-
-      return items.isEmpty ? fallbackQuotes : items;
-    }).handleError((_) => fallbackQuotes);
+    final remoteIds = remote.map((item) => item.id).toSet();
+    return [
+      ...remote,
+      ...fallbackQuotes.where((item) => !remoteIds.contains(item.id)),
+    ];
   }
 
-  Stream<List<WisdomQuote>> adminQuotes() {
-    if (!ready) return Stream.value(const []);
+  Stream<List<WisdomQuote>> quotes() async* {
+    if (!ready) {
+      yield fallbackQuotes;
+      return;
+    }
 
-    return FirebaseDatabase.instance.ref('quotes').onValue.map((event) {
+    try {
+      await for (final event
+          in FirebaseDatabase.instance.ref('quotes').onValue) {
+        yield _quotesFromValue(event.snapshot.value, includeInactive: false);
+      }
+    } catch (_) {
+      yield fallbackQuotes;
+    }
+  }
+
+  Stream<List<WisdomQuote>> adminQuotes() async* {
+    if (!ready) {
+      yield fallbackQuotes;
+      return;
+    }
+
+    try {
+      await for (final event
+          in FirebaseDatabase.instance.ref('quotes').onValue) {
+        yield _quotesFromValue(event.snapshot.value, includeInactive: true);
+      }
+    } catch (_) {
+      yield fallbackQuotes;
+    }
+  }
+
+  Stream<List<DevoteeActivity>> adminActivity() async* {
+    if (!ready) {
+      yield const [];
+      return;
+    }
+
+    await for (final event in FirebaseDatabase.instance.ref('users').onValue) {
       final value = event.snapshot.value;
-      if (value is! Map) return <WisdomQuote>[];
+      if (value is! Map) {
+        yield const [];
+        continue;
+      }
 
-      final items = value.entries
+      final users = value.entries
           .map((entry) {
             if (entry.value is! Map) return null;
-            return WisdomQuote.fromEntry(entry.key.toString(),
-                Map<dynamic, dynamic>.from(entry.value as Map));
+            return DevoteeActivity.fromEntry(
+              entry.key.toString(),
+              Map<dynamic, dynamic>.from(entry.value as Map),
+            );
           })
-          .whereType<WisdomQuote>()
-          .where((item) =>
-              item.text.trim().isNotEmpty || item.textHindi.trim().isNotEmpty)
+          .whereType<DevoteeActivity>()
           .toList()
-        ..sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
-
-      return items;
-    });
+        ..sort((a, b) => (b.lastActiveAt ?? 0).compareTo(a.lastActiveAt ?? 0));
+      yield users;
+    }
   }
 
   Future<void> publishQuote({
@@ -1953,37 +2113,74 @@ class _DevoteeShellState extends State<DevoteeShell>
   String get _routineStorageKey =>
       widget.user == null ? routineKey : '$routineKey:${widget.user!.uid}';
 
-  DatabaseReference? get _cloudProfileReference {
+  DatabaseReference? get _cloudUserReference {
     final user = widget.user;
     if (!widget.firebaseReady || user == null) return null;
-    return FirebaseDatabase.instance.ref('users/${user.uid}/profile');
+    return FirebaseDatabase.instance.ref('users/${user.uid}');
   }
 
   Future<DevoteeProfile?> _loadCloudProfile() async {
-    final reference = _cloudProfileReference;
+    final reference = _cloudUserReference;
     if (reference == null) return null;
 
     try {
       final snapshot =
           await reference.get().timeout(const Duration(seconds: 6));
-      return DevoteeProfile.fromMap(snapshot.value);
+      final value = snapshot.value;
+      if (value is! Map) return null;
+      return DevoteeProfile.fromMap(value['profile']) ??
+          DevoteeProfile.fromMap(value);
     } catch (_) {
       return null;
     }
   }
 
   Future<void> _saveCloudProfile(DevoteeProfile profile) async {
-    final reference = _cloudProfileReference;
+    final reference = _cloudUserReference;
     if (reference == null) return;
+    final user = widget.user;
 
     try {
-      await reference.set({
-        ...profile.toJson(),
+      await reference.update({
+        'profile': profile.toJson(),
+        'name': profile.fullName,
+        'uid': user?.uid,
+        'email': user?.email ?? '',
+        'phone': user?.phoneNumber ?? '',
+        'isEmailVerified': user?.emailVerified ?? false,
+        'isProfileComplete': true,
         'profileCompleted': true,
         'updatedAt': ServerValue.timestamp,
       }).timeout(const Duration(seconds: 8));
     } catch (_) {
       // The local account copy remains available while Firebase is offline.
+    }
+  }
+
+  Future<Map<String, Map<String, bool>>> _loadCloudRecords() async {
+    final reference = _cloudUserReference?.child('routine');
+    if (reference == null) return {};
+
+    try {
+      final snapshot =
+          await reference.get().timeout(const Duration(seconds: 6));
+      return routineRecordsFromValue(snapshot.value);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _saveCloudRecords() async {
+    final reference = _cloudUserReference;
+    if (reference == null) return;
+
+    try {
+      await reference.update({
+        'routine': records,
+        'lastActiveAt': ServerValue.timestamp,
+      }).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // Local activity remains available until the next successful sync.
     }
   }
 
@@ -2007,24 +2204,25 @@ class _DevoteeShellState extends State<DevoteeShell>
       needsProfileName = true;
     }
 
+    final cloudRecords = await _loadCloudRecords();
+    records = {...cloudRecords};
     if (savedRecords != null) {
       try {
         final decoded = jsonDecode(savedRecords);
-        if (decoded is Map) {
-          records = decoded.map((date, value) {
-            if (value is! Map) {
-              return MapEntry(date.toString(), <String, bool>{});
-            }
-            final item = Map<String, dynamic>.from(value);
-            return MapEntry(
-              date.toString(),
-              item.map((key, done) => MapEntry(key, done == true)),
-            );
-          });
+        final localRecords = routineRecordsFromValue(decoded);
+        for (final entry in localRecords.entries) {
+          records[entry.key] = {
+            ...?records[entry.key],
+            ...entry.value,
+          };
         }
       } catch (_) {
-        records = {};
+        // Keep any activity restored from Firebase.
       }
+    }
+
+    if (widget.user != null && records.isNotEmpty) {
+      unawaited(_saveCloudRecords());
     }
 
     localStateLoaded = true;
@@ -2083,62 +2281,14 @@ class _DevoteeShellState extends State<DevoteeShell>
   Future<void> _saveRecords() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_routineStorageKey, jsonEncode(records));
+    await _saveCloudRecords();
   }
 
   String get todayKey => DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   Map<String, bool> get today => records[todayKey] ?? {};
 
-  RoutineStats get stats {
-    final completeKeys = records.entries
-        .where((entry) => _isMeditationDay(entry.value))
-        .map((entry) => entry.key)
-        .toList()
-      ..sort();
-
-    var best = 0;
-    var run = 0;
-    DateTime? previous;
-
-    for (final key in completeKeys) {
-      final current = DateTime.parse(key);
-      if (previous != null && current.difference(previous).inDays == 1) {
-        run++;
-      } else {
-        run = 1;
-      }
-      best = max(best, run);
-      previous = current;
-    }
-
-    var cursor = DateTime.now();
-    if (!_isMeditationDay(
-        records[DateFormat('yyyy-MM-dd').format(cursor)] ?? {})) {
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-
-    var current = 0;
-    while (_isMeditationDay(
-        records[DateFormat('yyyy-MM-dd').format(cursor)] ?? {})) {
-      current++;
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-
-    const milestones = [7, 21, 40, 90, 108, 365];
-    final next = milestones.firstWhere((item) => item > current,
-        orElse: () => current + 108);
-
-    return RoutineStats(
-      current: current,
-      best: best,
-      total: completeKeys.length,
-      daysToMilestone: next - current,
-    );
-  }
-
-  bool _isMeditationDay(Map<String, bool> item) {
-    return item[RoutineTask.meditation.name] == true;
-  }
+  RoutineStats get stats => routineStatsFromRecords(records);
 
   Future<void> _markTask(RoutineTask task) async {
     setState(() {
@@ -2867,6 +3017,8 @@ class _DevoteeShellState extends State<DevoteeShell>
       PracticeTab.wisdom: _WisdomScreen(quotesStream: content.quotes()),
       PracticeTab.more: _MoreScreen(
         user: widget.user,
+        profile: devoteeProfile!,
+        onProfileChanged: _saveProfile,
         onSignOut: _signOut,
       ),
     };
@@ -3546,9 +3698,9 @@ class _HomeScreen extends StatelessWidget {
       stream: quotesStream,
       initialData: fallbackQuotes,
       builder: (context, snapshot) {
-        final quotes = snapshot.data ?? fallbackQuotes;
-        final quote = localizedWisdomQuote(
-            context, quotes[DateTime.now().day % quotes.length]);
+        final quotes =
+            snapshot.data?.isNotEmpty == true ? snapshot.data! : fallbackQuotes;
+        final quote = localizedWisdomQuote(context, quotes.first);
 
         return _PageScaffold(
           children: [
@@ -5126,9 +5278,9 @@ class _WisdomScreen extends StatelessWidget {
       stream: quotesStream,
       initialData: fallbackQuotes,
       builder: (context, snapshot) {
-        final quotes = snapshot.data ?? fallbackQuotes;
-        final quote = localizedWisdomQuote(
-            context, quotes[DateTime.now().day % quotes.length]);
+        final quotes =
+            snapshot.data?.isNotEmpty == true ? snapshot.data! : fallbackQuotes;
+        final quote = localizedWisdomQuote(context, quotes.first);
 
         return _PageScaffold(
           children: [
@@ -5143,11 +5295,11 @@ class _WisdomScreen extends StatelessWidget {
               ),
             ),
             _WisdomFeature(quote: quote),
-            ...quotes.map(
-              (item) => _WisdomQuoteCard(
-                quote: localizedWisdomQuote(context, item),
-              ),
-            ),
+            ...quotes.skip(1).map(
+                  (item) => _WisdomQuoteCard(
+                    quote: localizedWisdomQuote(context, item),
+                  ),
+                ),
           ],
         );
       },
@@ -5212,11 +5364,24 @@ class _WisdomQuoteCard extends StatelessWidget {
 class _MoreScreen extends StatelessWidget {
   const _MoreScreen({
     required this.user,
+    required this.profile,
+    required this.onProfileChanged,
     required this.onSignOut,
   });
 
   final User? user;
+  final DevoteeProfile profile;
+  final Future<void> Function(DevoteeProfile profile) onProfileChanged;
   final Future<void> Function() onSignOut;
+
+  Future<void> _editName(BuildContext context) async {
+    final updated = await showDialog<DevoteeProfile>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _EditNameDialog(profile: profile),
+    );
+    if (updated != null) await onProfileChanged(updated);
+  }
 
   Future<void> _confirmSignOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -5312,6 +5477,16 @@ class _MoreScreen extends StatelessWidget {
               ),
               const _LanguageSettingsCard(),
               const _ComingSoonModules(),
+              OutlinedButton.icon(
+                onPressed: () => _editName(context),
+                icon: const Icon(Icons.manage_accounts_rounded),
+                label: Text(appText(context, 'Name', 'नाम')),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(58),
+                  foregroundColor: AppColors.maroon,
+                  backgroundColor: AppColors.offWhite,
+                ),
+              ),
               FilledButton.icon(
                 onPressed: () => _confirmSignOut(context),
                 icon: const Icon(Icons.logout_rounded),
@@ -5342,6 +5517,118 @@ class _MoreScreen extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditNameDialog extends StatefulWidget {
+  const _EditNameDialog({required this.profile});
+
+  final DevoteeProfile profile;
+
+  @override
+  State<_EditNameDialog> createState() => _EditNameDialogState();
+}
+
+class _EditNameDialogState extends State<_EditNameDialog> {
+  late final TextEditingController firstName;
+  late final TextEditingController middleName;
+  late final TextEditingController lastName;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    firstName = TextEditingController(text: widget.profile.firstName);
+    middleName = TextEditingController(text: widget.profile.middleName);
+    lastName = TextEditingController(text: widget.profile.lastName);
+  }
+
+  @override
+  void dispose() {
+    firstName.dispose();
+    middleName.dispose();
+    lastName.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final profile = DevoteeProfile.fromParts(
+      firstName: firstName.text,
+      middleName: middleName.text,
+      lastName: lastName.text,
+    );
+    if (profile == null) {
+      setState(() => error = appText(
+            context,
+            'Please enter your first name.',
+            'कृपया अपना प्रथम नाम अंकित करें।',
+          ));
+      return;
+    }
+    Navigator.pop(context, profile);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      icon: const Icon(Icons.manage_accounts_rounded,
+          color: AppColors.maroon, size: 34),
+      title: Text(
+        appText(context, 'Change your name', 'अपना नाम बदलें'),
+        textAlign: TextAlign.center,
+      ),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('edit-first-name'),
+                controller: firstName,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                decoration: _inputDecoration(
+                  appText(context, 'First name', 'प्रथम नाम'),
+                ).copyWith(errorText: error),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: middleName,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                decoration: _inputDecoration(
+                  appText(context, 'Middle name', 'मध्य नाम'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: lastName,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _save(),
+                decoration: _inputDecoration(
+                  appText(context, 'Last name', 'कुलनाम'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(appText(context, 'Cancel', 'निरस्त')),
+        ),
+        FilledButton.icon(
+          onPressed: _save,
+          icon: const Icon(Icons.check_rounded),
+          label: Text(appText(context, 'Save', 'सहेजें')),
         ),
       ],
     );
@@ -5697,6 +5984,30 @@ class _AdminConsoleState extends State<AdminConsole> {
     }
   }
 
+  Future<void> _signInWithGoogle() async {
+    if (!widget.firebaseReady) return;
+    setState(() {
+      busy = true;
+      status = '';
+    });
+    try {
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
+      if (kIsWeb) {
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+        await FirebaseAuth.instance.signInWithProvider(provider);
+      }
+    } on FirebaseAuthException catch (error) {
+      if (mounted) {
+        setState(() => status = error.message ?? 'Admin sign-in failed.');
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> _publishQuote() async {
     if (quoteEnglish.text.trim().isEmpty || quoteHindi.text.trim().isEmpty) {
       setState(() => status = appText(
@@ -5932,6 +6243,24 @@ class _AdminConsoleState extends State<AdminConsole> {
                   ),
                   _AdminCard(
                     children: [
+                      FilledButton.icon(
+                        onPressed: busy ? null : _signInWithGoogle,
+                        icon: const Icon(Icons.account_circle_rounded),
+                        label: const Text('Google'),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: Text('or'),
+                            ),
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+                      ),
                       TextField(
                           controller: email,
                           decoration: _inputDecoration(
@@ -6007,6 +6336,7 @@ class _AdminConsoleState extends State<AdminConsole> {
                         'प्रवेशित प्रशासक: ${user.email}',
                       ),
                     ),
+                    _activityDashboard(),
                     _AdminCard(children: _quoteForm()),
                     _quoteManager(),
                     if (status.isNotEmpty) _StatusText(status),
@@ -6190,6 +6520,390 @@ class _AdminConsoleState extends State<AdminConsole> {
           ],
         );
       },
+    );
+  }
+
+  Widget _activityDashboard() {
+    return StreamBuilder<List<DevoteeActivity>>(
+      stream: widget.content.adminActivity(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const _AdminCard(
+            children: [Center(child: CircularProgressIndicator())],
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _AdminCard(
+            children: [
+              Text(
+                appText(
+                  context,
+                  'User activity could not be loaded. Check the Firebase database rules.',
+                  'सदस्य-साधना विवरण प्राप्त नहीं हो सका। Firebase नियमों की जाँच करें।',
+                ),
+                style: const TextStyle(color: AppColors.crimson),
+              ),
+            ],
+          );
+        }
+
+        final users = snapshot.data ?? const <DevoteeActivity>[];
+        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final activeToday = users
+            .where((user) => user.records[today]?.values.contains(true) == true)
+            .length;
+
+        return _AdminCard(
+          children: [
+            Row(
+              children: [
+                const _IconBadge(
+                  icon: Icons.insights_rounded,
+                  background: Color(0xFFE7EFE9),
+                  color: AppColors.sage,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    appText(context, 'Devotee activity', 'सदस्य-साधना विवरण'),
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _AdminMetric(
+                  label: appText(context, 'Registered', 'पंजीकृत'),
+                  value: '${users.length}',
+                  icon: Icons.people_alt_rounded,
+                ),
+                _AdminMetric(
+                  label: appText(context, 'Active today', 'आज सक्रिय'),
+                  value: '$activeToday',
+                  icon: Icons.today_rounded,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              appText(
+                context,
+                'Meditation completions in the last seven days',
+                'गत सात दिवसों की ध्यान-पूर्णता',
+              ),
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _SevenDayActivityChart(users: users),
+            const Divider(height: 30),
+            Text(
+              appText(context, 'Individual practice history',
+                  'व्यक्तिगत साधना-विवरण'),
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (users.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  appText(
+                    context,
+                    'No registered devotees are available yet.',
+                    'अभी कोई पंजीकृत सदस्य उपलब्ध नहीं है।',
+                  ),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              )
+            else
+              for (final user in users) _AdminUserActivityTile(user: user),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AdminMetric extends StatelessWidget {
+  const _AdminMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.offWhite,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.maroon),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(label, style: const TextStyle(color: AppColors.taupe)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SevenDayActivityChart extends StatelessWidget {
+  const _SevenDayActivityChart({required this.users});
+
+  final List<DevoteeActivity> users;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final days = List.generate(
+      7,
+      (index) => now.subtract(Duration(days: 6 - index)),
+    );
+    final counts = days.map((day) {
+      final key = DateFormat('yyyy-MM-dd').format(day);
+      return users
+          .where(
+              (user) => user.records[key]?[RoutineTask.meditation.name] == true)
+          .length;
+    }).toList();
+    final maxCount = max(1, counts.fold<int>(0, max));
+
+    return SizedBox(
+      height: 176,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (var index = 0; index < days.length; index++)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${counts[index]}',
+                      style: const TextStyle(
+                        color: AppColors.maroon,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Container(
+                      height: 18 + (92 * counts[index] / maxCount),
+                      decoration: BoxDecoration(
+                        color: counts[index] == 0
+                            ? AppColors.rose
+                            : AppColors.maroon,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(6),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      DateFormat('EEE').format(days[index]),
+                      maxLines: 1,
+                      style: const TextStyle(
+                        color: AppColors.taupe,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminUserActivityTile extends StatelessWidget {
+  const _AdminUserActivityTile({required this.user});
+
+  final DevoteeActivity user;
+
+  @override
+  Widget build(BuildContext context) {
+    final recentDays = user.records.entries
+        .where((entry) => entry.value.values.contains(true))
+        .toList()
+      ..sort((a, b) => b.key.compareTo(a.key));
+    final stats = user.meditationStats;
+
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 14),
+      leading: CircleAvatar(
+        backgroundColor: AppColors.rose,
+        foregroundColor: AppColors.maroon,
+        child: Text(user.name.characters.first.toUpperCase()),
+      ),
+      title: Text(
+        user.name,
+        style: const TextStyle(
+          color: AppColors.ink,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      subtitle: Text(
+        user.contact,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _ActivityPill(
+              label: appText(context, 'Meditation', 'ध्यान'),
+              value: '${stats.total}',
+            ),
+            _ActivityPill(
+              label: appText(context, 'Current streak', 'वर्तमान क्रम'),
+              value: '${stats.current}',
+            ),
+            _ActivityPill(
+              label: appText(context, 'Morning', 'प्रातः'),
+              value: '${user.count(RoutineTask.morningSatsang)}',
+            ),
+            _ActivityPill(
+              label: appText(context, 'Evening', 'सायं'),
+              value: '${user.count(RoutineTask.eveningSatsang)}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (recentDays.isEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              appText(
+                context,
+                'No practice has been recorded from the updated app yet.',
+                'अद्यतन अनुप्रयोग से अभी कोई साधना अंकित नहीं हुई है।',
+              ),
+              style: const TextStyle(color: AppColors.taupe),
+            ),
+          )
+        else
+          for (final day in recentDays.take(14))
+            _AdminActivityDay(date: day.key, tasks: day.value),
+      ],
+    );
+  }
+}
+
+class _ActivityPill extends StatelessWidget {
+  const _ActivityPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.parchment,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$label: $value',
+        style: const TextStyle(
+          color: AppColors.ink,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminActivityDay extends StatelessWidget {
+  const _AdminActivityDay({required this.date, required this.tasks});
+
+  final String date;
+  final Map<String, bool> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = <String>[
+      if (tasks[RoutineTask.morningSatsang.name] == true)
+        appText(context, 'Morning satsang', 'प्रातः सत्संग'),
+      if (tasks[RoutineTask.eveningSatsang.name] == true)
+        appText(context, 'Evening satsang', 'सायं सत्संग'),
+      if (tasks[RoutineTask.meditation.name] == true)
+        appText(context, 'Meditation', 'ध्यान'),
+    ];
+    final parsed = DateTime.tryParse(date);
+    final dateLabel =
+        parsed == null ? date : DateFormat('dd MMM yyyy').format(parsed);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_circle_rounded,
+              size: 18, color: AppColors.sage),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 92,
+            child: Text(
+              dateLabel,
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              completed.join(', '),
+              style: const TextStyle(color: AppColors.taupe),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

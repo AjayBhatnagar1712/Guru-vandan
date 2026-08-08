@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "540841544767",
+    "firebase_url": "https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "guru-vandan",
     "storage_bucket": "guru-vandan.firebasestorage.app"
   },
@@ -12,7 +13,28 @@
           "package_name": "com.ivar.guruvandan"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "540841544767-3j14dso0veq0iqalsma4muuo8cl3andn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ivar.guruvandan",
+            "certificate_hash": "37f868674273e98c04c50b2cdad8ca2f2a8eb248"
+          }
+        },
+        {
+          "client_id": "540841544767-ndqj6otr7vlr7lvaoph7q2bcsmf9r887.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ivar.guruvandan",
+            "certificate_hash": "4f272bb28fa6a37eb9c5423ab488cf6db7889e9f"
+          }
+        },
+        {
+          "client_id": "540841544767-tlaebghbususiucprk4g2i2t1n2m5fmk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBDnC1IE0BImeYue5vaOicS4_Miw0Vd2xE"
@@ -20,7 +42,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "540841544767-tlaebghbususiucprk4g2i2t1n2m5fmk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
