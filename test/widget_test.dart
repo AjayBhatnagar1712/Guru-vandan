@@ -245,6 +245,38 @@ void main() {
     expect(find.text('Sacred offerings'), findsNothing);
   });
 
+  testWidgets('Logout returns to sign-in and preserves the saved name',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpSavedHome(tester);
+
+    await tester.tap(find.text('Other'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Logout'));
+    await tester.tap(find.text('Logout'));
+    await tester.pumpAndSettle();
+
+    final confirmLogout = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.text('Logout'),
+    );
+    expect(confirmLogout, findsOneWidget);
+    await tester.tap(confirmLogout);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Guruvandan'), findsOneWidget);
+    final preferences = await SharedPreferences.getInstance();
+    final savedProfile = DevoteeProfile.fromStoredValue(
+      preferences.getString('guruvandan_flutter:name'),
+    );
+    expect(
+      savedProfile?.displayName,
+      'Ajay',
+    );
+  });
+
   testWidgets('Bottom navigation stays aligned on a narrow phone',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));

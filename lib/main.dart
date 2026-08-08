@@ -1386,10 +1386,12 @@ class _SignInScreen extends StatefulWidget {
   const _SignInScreen({
     this.initialStatus,
     this.initialStatusIsError = false,
+    this.onSignedIn,
   });
 
   final String? initialStatus;
   final bool initialStatusIsError;
+  final VoidCallback? onSignedIn;
 
   @override
   State<_SignInScreen> createState() => _SignInScreenState();
@@ -1447,6 +1449,7 @@ class _SignInScreenState extends State<_SignInScreen> {
       } else {
         await FirebaseAuth.instance.signInWithProvider(provider);
       }
+      widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       _setError(_friendlyAuthMessage(
         language,
@@ -1504,6 +1507,7 @@ class _SignInScreenState extends State<_SignInScreen> {
           phoneNumber: phoneNumber,
           verificationCompleted: (credential) async {
             await FirebaseAuth.instance.signInWithCredential(credential);
+            widget.onSignedIn?.call();
           },
           verificationFailed: (error) {
             if (mounted) {
@@ -1599,6 +1603,7 @@ class _SignInScreenState extends State<_SignInScreen> {
         );
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
+      widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       _setError(_friendlyAuthMessage(
         language,
@@ -1828,6 +1833,7 @@ class _DevoteeShellState extends State<DevoteeShell>
   DevoteeProfile? devoteeProfile;
   bool localStateLoaded = false;
   bool needsProfileName = false;
+  bool showSignInAfterLogout = false;
   Map<String, Map<String, bool>> records = {};
   String? activeTrackId;
   RoutineTask? activeTrackTask;
@@ -2291,8 +2297,14 @@ class _DevoteeShellState extends State<DevoteeShell>
     meditationTimer?.cancel();
     meditationEndsAt = null;
     await _stopBackgroundAudio();
-    if (widget.firebaseReady) {
-      await FirebaseAuth.instance.signOut();
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        await FirebaseAuth.instance.signOut();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => showSignInAfterLogout = true);
+      }
     }
   }
 
@@ -2776,6 +2788,14 @@ class _DevoteeShellState extends State<DevoteeShell>
 
   @override
   Widget build(BuildContext context) {
+    if (showSignInAfterLogout) {
+      return _SignInScreen(
+        onSignedIn: () {
+          if (mounted) setState(() => showSignInAfterLogout = false);
+        },
+      );
+    }
+
     if (!localStateLoaded || needsProfileName) {
       return Scaffold(
         body: Stack(
@@ -5292,6 +5312,15 @@ class _MoreScreen extends StatelessWidget {
               ),
               const _LanguageSettingsCard(),
               const _ComingSoonModules(),
+              FilledButton.icon(
+                onPressed: () => _confirmSignOut(context),
+                icon: const Icon(Icons.logout_rounded),
+                label: Text(appText(context, 'Logout', 'प्रस्थान')),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(58),
+                  backgroundColor: AppColors.maroon,
+                ),
+              ),
               if (user != null)
                 Container(
                   padding: const EdgeInsets.all(22),
@@ -5312,30 +5341,6 @@ class _MoreScreen extends StatelessWidget {
                   ),
                 ),
             ],
-          ),
-        ),
-        Positioned(
-          left: 18,
-          right: 18,
-          bottom: 12,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => _confirmSignOut(context),
-                  icon: const Icon(Icons.logout_rounded),
-                  label: Text(appText(context, 'Logout', 'प्रस्थान')),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(58),
-                    backgroundColor: AppColors.maroon,
-                    elevation: 8,
-                    shadowColor: AppColors.maroon.withValues(alpha: 0.24),
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
       ],
