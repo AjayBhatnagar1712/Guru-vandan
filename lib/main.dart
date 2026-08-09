@@ -54,9 +54,31 @@ const _firebaseAndroidOptions = FirebaseOptions(
   storageBucket: 'guru-vandan.firebasestorage.app',
 );
 
+const _firebaseIosOptions = FirebaseOptions(
+  apiKey: String.fromEnvironment(
+    'FIREBASE_IOS_API_KEY',
+    defaultValue: 'AIzaSyBp2KIcoIKAw1EJCbDF8SaK0KOjE49uQHk',
+  ),
+  appId: String.fromEnvironment(
+    'FIREBASE_IOS_APP_ID',
+    defaultValue: '1:540841544767:ios:a622bd4baf314086cebc8a',
+  ),
+  messagingSenderId: '540841544767',
+  projectId: 'guru-vandan',
+  databaseURL:
+      'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/',
+  storageBucket: 'guru-vandan.firebasestorage.app',
+  iosClientId:
+      '540841544767-qt1h14f37kh1vrv3cm0oko6gli8a158r.apps.googleusercontent.com',
+  iosBundleId: 'com.ivar.guruvandan',
+);
+
 FirebaseOptions get firebaseOptions {
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     return _firebaseAndroidOptions;
+  }
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+    return _firebaseIosOptions;
   }
   return _firebaseWebOptions;
 }

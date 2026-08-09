@@ -65,7 +65,15 @@ The project currently uses Firebase project values discovered from the Android r
 - project id: `guru-vandan`
 - realtime database: `https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/`
 
-Before production, create proper Firebase web and iOS apps in the same Firebase project and replace placeholder values in `lib/main.dart`.
+The native Firebase iOS app is registered with bundle identifier
+`com.ivar.guruvandan`. Its platform configuration is included in the iOS project.
+
+## iOS
+
+The iOS source, native Firebase configuration, background audio modes, phone-auth
+capabilities, app icons, and CocoaPods setup are ready. Apple signing still has
+to be completed with an Apple Developer account on macOS or a cloud macOS build
+service. Follow [docs/IOS_BUILD.md](docs/IOS_BUILD.md) for the exact handoff.
 
 ## Sign In Setup
 
