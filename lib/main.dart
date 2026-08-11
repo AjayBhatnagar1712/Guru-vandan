@@ -14,9 +14,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const allowedAdminEmail = 'ajaybhatnagar1712@gmail.com';
+const appShareLink = 'https://ajaybhatnagar1712.github.io/Guru-vandan/';
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -182,7 +184,7 @@ class _GuruvandanAppState extends State<GuruvandanApp> {
       language: activeLanguage,
       onChanged: _setLanguage,
       child: MaterialApp(
-        title: 'Guruvandan',
+        title: 'Guru Vandan',
         debugShowCheckedModeBanner: false,
         locale: activeLanguage == AppLanguage.hindi
             ? const Locale('hi')
@@ -1046,6 +1048,45 @@ WisdomQuote localizedWisdomQuote(
   }
 }
 
+String wisdomQuoteShareText(BuildContext context, WisdomQuote quote) {
+  final heading = appText(
+    context,
+    'A sacred thought from Guru Vandan',
+    'गुरु वंदन का पावन वचन',
+  );
+  return '$heading\n\n"${quote.text}"\n\n- ${quote.author}\n\n$appShareLink';
+}
+
+Future<void> shareWisdomQuote(BuildContext context, WisdomQuote quote) async {
+  final renderBox = context.findRenderObject();
+  final origin = renderBox is RenderBox
+      ? renderBox.localToGlobal(Offset.zero) & renderBox.size
+      : null;
+
+  try {
+    await SharePlus.instance.share(
+      ShareParams(
+        text: wisdomQuoteShareText(context, quote),
+        subject: 'Guru Vandan',
+        sharePositionOrigin: origin,
+      ),
+    );
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          appText(
+            context,
+            'Sharing is not available on this device right now.',
+            'इस उपकरण पर अभी साझा करने की सुविधा उपलब्ध नहीं है।',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FirebaseContentService {
   FirebaseContentService(this.ready);
 
@@ -1058,6 +1099,7 @@ class FirebaseContentService {
   List<WisdomQuote> _quotesFromValue(
     Object? value, {
     required bool includeInactive,
+    bool includeFallback = true,
   }) {
     final remote = value is Map
         ? value.entries
@@ -1077,11 +1119,8 @@ class FirebaseContentService {
         : <WisdomQuote>[];
     remote.sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
 
-    final remoteIds = remote.map((item) => item.id).toSet();
-    return [
-      ...remote,
-      ...fallbackQuotes.where((item) => !remoteIds.contains(item.id)),
-    ];
+    if (remote.isNotEmpty || !includeFallback) return remote;
+    return fallbackQuotes;
   }
 
   Stream<List<WisdomQuote>> quotes() async* {
@@ -1090,13 +1129,28 @@ class FirebaseContentService {
       return;
     }
 
+    var emittedRemote = false;
+    final reference = FirebaseDatabase.instance.ref('quotes');
+
     try {
-      await for (final event
-          in FirebaseDatabase.instance.ref('quotes').onValue) {
-        yield _quotesFromValue(event.snapshot.value, includeInactive: false);
+      final snapshot = await reference.get().timeout(
+            const Duration(seconds: 8),
+          );
+      final firstLoad =
+          _quotesFromValue(snapshot.value, includeInactive: false);
+      if (firstLoad.isNotEmpty) {
+        emittedRemote = true;
+        yield firstLoad;
+      }
+
+      await for (final event in reference.onValue) {
+        final liveQuotes =
+            _quotesFromValue(event.snapshot.value, includeInactive: false);
+        emittedRemote = liveQuotes.isNotEmpty;
+        yield liveQuotes.isNotEmpty ? liveQuotes : fallbackQuotes;
       }
     } catch (_) {
-      yield fallbackQuotes;
+      if (!emittedRemote) yield fallbackQuotes;
     }
   }
 
@@ -1106,10 +1160,24 @@ class FirebaseContentService {
       return;
     }
 
+    final reference = FirebaseDatabase.instance.ref('quotes');
+
     try {
-      await for (final event
-          in FirebaseDatabase.instance.ref('quotes').onValue) {
-        yield _quotesFromValue(event.snapshot.value, includeInactive: true);
+      final snapshot = await reference.get().timeout(
+            const Duration(seconds: 8),
+          );
+      yield _quotesFromValue(
+        snapshot.value,
+        includeInactive: true,
+        includeFallback: false,
+      );
+
+      await for (final event in reference.onValue) {
+        yield _quotesFromValue(
+          event.snapshot.value,
+          includeInactive: true,
+          includeFallback: false,
+        );
       }
     } catch (_) {
       yield fallbackQuotes;
@@ -5377,7 +5445,37 @@ class _WisdomQuoteCard extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          _WisdomShareButton(quote: quote),
         ],
+      ),
+    );
+  }
+}
+
+class _WisdomShareButton extends StatelessWidget {
+  const _WisdomShareButton({
+    required this.quote,
+    this.prominent = false,
+  });
+
+  final WisdomQuote quote;
+  final bool prominent;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: () => shareWisdomQuote(context, quote),
+      icon: const Icon(Icons.ios_share_rounded),
+      tooltip: appText(context, 'Share quote', 'वचन साझा करें'),
+      style: IconButton.styleFrom(
+        fixedSize: const Size(42, 42),
+        minimumSize: const Size(42, 42),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor:
+            prominent ? Colors.white.withValues(alpha: 0.82) : AppColors.rose,
+        foregroundColor: AppColors.maroon,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -7332,8 +7430,14 @@ class _WisdomFeature extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.format_quote_rounded,
-              color: AppColors.gold, size: 36),
+          Row(
+            children: [
+              const Icon(Icons.format_quote_rounded,
+                  color: AppColors.gold, size: 36),
+              const Spacer(),
+              _WisdomShareButton(quote: quote, prominent: true),
+            ],
+          ),
           const SizedBox(height: 12),
           Text(
             quote.text,
