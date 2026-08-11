@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:just_audio_background/just_audio_background.dart';
@@ -19,6 +20,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const allowedAdminEmail = 'ajaybhatnagar1712@gmail.com';
 const appShareLink = 'https://ajaybhatnagar1712.github.io/Guru-vandan/';
+const firebaseDatabaseUrl =
+    'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -37,8 +40,7 @@ const _firebaseWebOptions = FirebaseOptions(
   messagingSenderId: '540841544767',
   projectId: 'guru-vandan',
   authDomain: 'guru-vandan.firebaseapp.com',
-  databaseURL:
-      'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/',
+  databaseURL: firebaseDatabaseUrl,
   storageBucket: 'guru-vandan.firebasestorage.app',
   measurementId: 'G-67CCGE1TTQ',
 );
@@ -51,8 +53,7 @@ const _firebaseAndroidOptions = FirebaseOptions(
   ),
   messagingSenderId: '540841544767',
   projectId: 'guru-vandan',
-  databaseURL:
-      'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/',
+  databaseURL: firebaseDatabaseUrl,
   storageBucket: 'guru-vandan.firebasestorage.app',
 );
 
@@ -67,8 +68,7 @@ const _firebaseIosOptions = FirebaseOptions(
   ),
   messagingSenderId: '540841544767',
   projectId: 'guru-vandan',
-  databaseURL:
-      'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app/',
+  databaseURL: firebaseDatabaseUrl,
   storageBucket: 'guru-vandan.firebasestorage.app',
   iosClientId:
       '540841544767-qt1h14f37kh1vrv3cm0oko6gli8a158r.apps.googleusercontent.com',
@@ -940,6 +940,32 @@ const fallbackQuotes = [
   ),
 ];
 
+List<WisdomQuote> wisdomQuotesFromFirebaseValue(
+  Object? value, {
+  required bool includeInactive,
+  bool includeFallback = true,
+}) {
+  final remote = value is Map
+      ? value.entries
+          .map((entry) {
+            if (entry.value is! Map) return null;
+            return WisdomQuote.fromEntry(
+              entry.key.toString(),
+              Map<dynamic, dynamic>.from(entry.value as Map),
+            );
+          })
+          .whereType<WisdomQuote>()
+          .where((item) =>
+              (includeInactive || item.active) &&
+              (item.text.trim().isNotEmpty || item.textHindi.trim().isNotEmpty))
+          .toList()
+      : <WisdomQuote>[];
+  remote.sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
+
+  if (remote.isNotEmpty || !includeFallback) return remote;
+  return fallbackQuotes;
+}
+
 SatsangTrack localizedSatsangTrack(
   BuildContext context,
   SatsangTrack track,
@@ -1100,27 +1126,43 @@ class FirebaseContentService {
     Object? value, {
     required bool includeInactive,
     bool includeFallback = true,
-  }) {
-    final remote = value is Map
-        ? value.entries
-            .map((entry) {
-              if (entry.value is! Map) return null;
-              return WisdomQuote.fromEntry(
-                entry.key.toString(),
-                Map<dynamic, dynamic>.from(entry.value as Map),
-              );
-            })
-            .whereType<WisdomQuote>()
-            .where((item) =>
-                (includeInactive || item.active) &&
-                (item.text.trim().isNotEmpty ||
-                    item.textHindi.trim().isNotEmpty))
-            .toList()
-        : <WisdomQuote>[];
-    remote.sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
+  }) =>
+      wisdomQuotesFromFirebaseValue(
+        value,
+        includeInactive: includeInactive,
+        includeFallback: includeFallback,
+      );
 
-    if (remote.isNotEmpty || !includeFallback) return remote;
-    return fallbackQuotes;
+  Future<List<WisdomQuote>> _publicQuotesFromRest() async {
+    final uri = Uri.parse('$firebaseDatabaseUrl/quotes.json');
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) return const [];
+
+    final decoded = jsonDecode(response.body);
+    return _quotesFromValue(
+      decoded,
+      includeInactive: false,
+      includeFallback: false,
+    );
+  }
+
+  Stream<List<WisdomQuote>> _restQuotePollingStream({
+    required bool hasEmittedRemoteQuotes,
+  }) async* {
+    var emittedRemoteQuotes = hasEmittedRemoteQuotes;
+
+    while (true) {
+      await Future<void>.delayed(const Duration(seconds: 45));
+      try {
+        final quotes = await _publicQuotesFromRest();
+        if (quotes.isNotEmpty) {
+          emittedRemoteQuotes = true;
+          yield quotes;
+        }
+      } catch (_) {
+        if (!emittedRemoteQuotes) yield fallbackQuotes;
+      }
+    }
   }
 
   Stream<List<WisdomQuote>> quotes() async* {
@@ -1130,27 +1172,59 @@ class FirebaseContentService {
     }
 
     var emittedRemote = false;
+
+    try {
+      final restQuotes = await _publicQuotesFromRest();
+      if (restQuotes.isNotEmpty) {
+        emittedRemote = true;
+        yield restQuotes;
+      }
+    } catch (_) {
+      // Firebase's SDK stream below, or the polling loop, will keep trying.
+    }
+
+    if (!ready) {
+      if (!emittedRemote) yield fallbackQuotes;
+      yield* _restQuotePollingStream(
+        hasEmittedRemoteQuotes: emittedRemote,
+      );
+      return;
+    }
+
     final reference = FirebaseDatabase.instance.ref('quotes');
 
     try {
       final snapshot = await reference.get().timeout(
             const Duration(seconds: 8),
           );
-      final firstLoad =
-          _quotesFromValue(snapshot.value, includeInactive: false);
+      final firstLoad = _quotesFromValue(
+        snapshot.value,
+        includeInactive: false,
+        includeFallback: false,
+      );
       if (firstLoad.isNotEmpty) {
         emittedRemote = true;
         yield firstLoad;
       }
 
       await for (final event in reference.onValue) {
-        final liveQuotes =
-            _quotesFromValue(event.snapshot.value, includeInactive: false);
-        emittedRemote = liveQuotes.isNotEmpty;
-        yield liveQuotes.isNotEmpty ? liveQuotes : fallbackQuotes;
+        final liveQuotes = _quotesFromValue(
+          event.snapshot.value,
+          includeInactive: false,
+          includeFallback: false,
+        );
+        if (liveQuotes.isNotEmpty) {
+          emittedRemote = true;
+          yield liveQuotes;
+        } else if (!emittedRemote) {
+          yield fallbackQuotes;
+        }
       }
     } catch (_) {
       if (!emittedRemote) yield fallbackQuotes;
+      yield* _restQuotePollingStream(
+        hasEmittedRemoteQuotes: emittedRemote,
+      );
     }
   }
 
@@ -3788,6 +3862,24 @@ class _HomeScreen extends StatelessWidget {
       stream: quotesStream,
       initialData: fallbackQuotes,
       builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _PageScaffold(
+            children: [
+              _ScreenTitle(
+                icon: Icons.format_quote_rounded,
+                title: appText(context, 'Sadguru\'s Daily Word',
+                    'à¤¨à¤¿à¤¤à¥à¤¯ à¤¸à¤¦à¥à¤—à¥à¤°à¥-à¤µà¤¾à¤£à¥€'),
+                subtitle: appText(
+                  context,
+                  'A brief teaching to carry in remembrance throughout the day.',
+                  'à¤¦à¤¿à¤µà¤¸à¤­à¤° à¤¸à¥à¤®à¤°à¤£ à¤®à¥‡à¤‚ à¤§à¤¾à¤°à¤£ à¤•à¤°à¤¨à¥‡ à¤¯à¥‹à¤—à¥à¤¯ à¤¸à¤¦à¥à¤—à¥à¤°à¥ à¤•à¤¾ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤‰à¤ªà¤¦à¥‡à¤¶à¥¤',
+                ),
+              ),
+              const _WisdomLoadingCard(),
+            ],
+          );
+        }
+
         final quotes =
             snapshot.data?.isNotEmpty == true ? snapshot.data! : fallbackQuotes;
         final quote = localizedWisdomQuote(context, quotes.first);
@@ -5384,6 +5476,7 @@ class _WisdomScreen extends StatelessWidget {
                 'दिवसभर स्मरण में धारण करने योग्य सद्गुरु का संक्षिप्त उपदेश।',
               ),
             ),
+            _WisdomLibraryCount(count: quotes.length),
             _WisdomFeature(quote: quote),
             ...quotes.skip(1).map(
                   (item) => _WisdomQuoteCard(
@@ -5393,6 +5486,71 @@ class _WisdomScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _WisdomLoadingCard extends StatelessWidget {
+  const _WisdomLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: _cardDecoration(color: AppColors.offWhite),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 26,
+            height: 26,
+            child: CircularProgressIndicator(strokeWidth: 3),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              appText(
+                context,
+                'Receiving the latest Sadguru wisdom...',
+                'à¤¨à¤µà¥€à¤¨à¤¤à¤® à¤¸à¤¦à¥à¤—à¥à¤°à¥-à¤µà¤¾à¤£à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤•à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¹à¥ˆ...',
+              ),
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WisdomLibraryCount extends StatelessWidget {
+  const _WisdomLibraryCount({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.rose,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          appText(
+            context,
+            '$count Wisdom Quotes',
+            '$count à¤ªà¤¾à¤µà¤¨ à¤µà¤šà¤¨',
+          ),
+          style: const TextStyle(
+            color: AppColors.maroon,
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -67,6 +67,30 @@ void main() {
     expect(quote.createdAt, 1234);
   });
 
+  test('Firebase quote parser keeps every uploaded quote newest first', () {
+    final firebaseValue = {
+      for (var index = 1; index <= 20; index++)
+        'quote-$index': {
+          'textEnglish': 'Sacred quote $index',
+          'textHindi': 'Pavan vachan $index',
+          'authorEnglish': 'Sadguru Maharaj',
+          'authorHindi': 'Sadguru Maharaj',
+          'active': true,
+          'createdAt': index,
+        },
+    };
+
+    final quotes = wisdomQuotesFromFirebaseValue(
+      firebaseValue,
+      includeInactive: false,
+      includeFallback: false,
+    );
+
+    expect(quotes, hasLength(20));
+    expect(quotes.first.text, 'Sacred quote 20');
+    expect(quotes.last.text, 'Sacred quote 1');
+  });
+
   test('Legacy Android user names are recognized as existing profiles', () {
     final profile = DevoteeProfile.fromMap({
       'name': 'Ravi Kumar',
