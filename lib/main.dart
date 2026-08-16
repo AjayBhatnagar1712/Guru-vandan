@@ -5476,7 +5476,6 @@ class _WisdomScreen extends StatelessWidget {
                 'दिवसभर स्मरण में धारण करने योग्य सद्गुरु का संक्षिप्त उपदेश।',
               ),
             ),
-            _WisdomLibraryCount(count: quotes.length),
             _WisdomFeature(quote: quote),
             ...quotes.skip(1).map(
                   (item) => _WisdomQuoteCard(
@@ -5517,39 +5516,6 @@ class _WisdomLoadingCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _WisdomLibraryCount extends StatelessWidget {
-  const _WisdomLibraryCount({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.rose,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Text(
-          appText(
-            context,
-            '$count Wisdom Quotes',
-            '$count à¤ªà¤¾à¤µà¤¨ à¤µà¤šà¤¨',
-          ),
-          style: const TextStyle(
-            color: AppColors.maroon,
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
       ),
     );
   }
