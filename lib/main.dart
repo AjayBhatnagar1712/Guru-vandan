@@ -303,6 +303,20 @@ class AppColors {
   static const surface = Color(0xFFFFFFFF);
 }
 
+class _AppIconMark extends StatelessWidget {
+  const _AppIconMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/app_icon.png',
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
 enum PracticeTab { home, satsang, meditate, wisdom, more }
 
 enum SatsangSession { morning, evening, aarti }
@@ -382,10 +396,7 @@ class _FirstLaunchLanguageScreen extends StatelessWidget {
                               ),
                             ],
                           ),
-                          child: Image.asset(
-                            'assets/images/app_icon.png',
-                            fit: BoxFit.contain,
-                          ),
+                          child: const _AppIconMark(),
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -1731,6 +1742,8 @@ class _SignInScreenState extends State<_SignInScreen> {
   String? status;
   bool statusIsError = false;
 
+  bool get _phoneSignInEnabled => false;
+
   @override
   void initState() {
     super.initState();
@@ -1987,8 +2000,7 @@ class _SignInScreenState extends State<_SignInScreen> {
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: AppColors.borderStrong),
                             ),
-                            child: Image.asset('assets/images/app_icon.png',
-                                fit: BoxFit.contain),
+                            child: const _AppIconMark(),
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -2011,8 +2023,8 @@ class _SignInScreenState extends State<_SignInScreen> {
                         Text(
                           appText(
                             context,
-                            'Enter your sacred daily practice through Google or your phone number.',
-                            'अपनी नित्य आध्यात्मिक साधना में प्रवेश हेतु Google अथवा दूरभाष क्रमांक का चयन करें।',
+                            'Enter your sacred daily practice through Google.',
+                            'अपनी नित्य आध्यात्मिक साधना में प्रवेश हेतु Google का चयन करें।',
                           ),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyLarge,
@@ -2032,87 +2044,90 @@ class _SignInScreenState extends State<_SignInScreen> {
                             backgroundColor: AppColors.maroon,
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            const Expanded(child: Divider()),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text(
-                                appText(context, 'or use phone', 'अथवा दूरभाष'),
-                                style: TextStyle(
-                                  color: AppColors.taupe,
-                                  fontWeight: FontWeight.w800,
+                        if (_phoneSignInEnabled) ...[
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  appText(
+                                      context, 'or use phone', 'अथवा दूरभाष'),
+                                  style: TextStyle(
+                                    color: AppColors.taupe,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const Expanded(child: Divider()),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        TextField(
-                          controller: phone,
-                          enabled: !busy && !otpSent,
-                          keyboardType: TextInputType.phone,
-                          textInputAction: TextInputAction.next,
-                          decoration: _inputDecoration(appText(
-                            context,
-                            'Phone number',
-                            'दूरभाष क्रमांक',
-                          )).copyWith(
-                            hintText: '+91 98765 43210',
-                            prefixIcon: const Icon(Icons.phone_rounded),
+                              const Expanded(child: Divider()),
+                            ],
                           ),
-                        ),
-                        if (otpSent) ...[
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 20),
                           TextField(
-                            controller: otp,
-                            enabled: !busy,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _verifyOtp(),
+                            controller: phone,
+                            enabled: !busy && !otpSent,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
                             decoration: _inputDecoration(appText(
                               context,
-                              'OTP code',
-                              'एकबारगी कूट (OTP)',
+                              'Phone number',
+                              'दूरभाष क्रमांक',
                             )).copyWith(
-                              prefixIcon: const Icon(Icons.sms_rounded),
+                              hintText: '+91 98765 43210',
+                              prefixIcon: const Icon(Icons.phone_rounded),
                             ),
                           ),
-                        ],
-                        const SizedBox(height: 16),
-                        OutlinedButton.icon(
-                          onPressed:
-                              busy ? null : (otpSent ? _verifyOtp : _sendOtp),
-                          icon: Icon(otpSent
-                              ? Icons.verified_user_rounded
-                              : Icons.sms_rounded),
-                          label: Text(otpSent
-                              ? appText(context, 'Verify', 'प्रमाणित')
-                              : appText(context, 'Send', 'प्रेषित')),
-                        ),
-                        if (otpSent) ...[
-                          const SizedBox(height: 10),
-                          TextButton(
-                            onPressed: busy
-                                ? null
-                                : () {
-                                    setState(() {
-                                      otp.clear();
-                                      confirmationResult = null;
-                                      verificationId = null;
-                                      otpSent = false;
-                                      status = null;
-                                    });
-                                  },
-                            child: Text(appText(
-                              context,
-                              'Change',
-                              'परिवर्तन',
-                            )),
+                          if (otpSent) ...[
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: otp,
+                              enabled: !busy,
+                              keyboardType: TextInputType.number,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _verifyOtp(),
+                              decoration: _inputDecoration(appText(
+                                context,
+                                'OTP code',
+                                'एकबारगी कूट (OTP)',
+                              )).copyWith(
+                                prefixIcon: const Icon(Icons.sms_rounded),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed:
+                                busy ? null : (otpSent ? _verifyOtp : _sendOtp),
+                            icon: Icon(otpSent
+                                ? Icons.verified_user_rounded
+                                : Icons.sms_rounded),
+                            label: Text(otpSent
+                                ? appText(context, 'Verify', 'प्रमाणित')
+                                : appText(context, 'Send', 'प्रेषित')),
                           ),
+                          if (otpSent) ...[
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        otp.clear();
+                                        confirmationResult = null;
+                                        verificationId = null;
+                                        otpSent = false;
+                                        status = null;
+                                      });
+                                    },
+                              child: Text(appText(
+                                context,
+                                'Change',
+                                'परिवर्तन',
+                              )),
+                            ),
+                          ],
                         ],
                         if (status != null) ...[
                           const SizedBox(height: 14),
@@ -3309,8 +3324,7 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: AppColors.borderStrong),
                     ),
-                    child: Image.asset('assets/images/app_icon.png',
-                        fit: BoxFit.contain),
+                    child: const _AppIconMark(),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -5697,8 +5711,7 @@ class _MoreScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: AppColors.borderStrong),
                       ),
-                      child: Image.asset('assets/images/app_icon.png',
-                          fit: BoxFit.contain),
+                      child: const _AppIconMark(),
                     ),
                     const SizedBox(height: 22),
                     Text(
