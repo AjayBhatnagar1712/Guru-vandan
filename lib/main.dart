@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart' as ja;
@@ -22,6 +23,8 @@ const allowedAdminEmail = 'ajaybhatnagar1712@gmail.com';
 const appShareLink = 'https://ajaybhatnagar1712.github.io/Guru-vandan/';
 const firebaseDatabaseUrl =
     'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app';
+const _googleServerClientId =
+    '540841544767-tlaebghbususiucprk4g2i2t1n2m5fmk.apps.googleusercontent.com';
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -86,6 +89,7 @@ FirebaseOptions get firebaseOptions {
 }
 
 ja.AudioPlayer? _backgroundAudioPlayer;
+Future<void>? _googleSignInInitialization;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1773,22 +1777,18 @@ class _SignInScreenState extends State<_SignInScreen> {
     });
 
     try {
-      final provider = GoogleAuthProvider()
-        ..addScope('email')
-        ..addScope('profile');
-      if (kIsWeb) {
-        try {
-          await FirebaseAuth.instance.signInWithPopup(provider);
-        } on FirebaseAuthException catch (error) {
-          if (!_shouldFallbackToRedirect(error.code)) rethrow;
-          await FirebaseAuth.instance.signInWithRedirect(provider);
-        }
-      } else {
-        await FirebaseAuth.instance.signInWithProvider(provider);
-      }
+      await _signInToFirebaseWithGoogle();
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
+      if (error.code == 'redirect-started') return;
       _setError(_friendlyAuthMessage(
+        language,
+        error,
+        'Google sign-in could not be completed.',
+        'Google द्वारा प्रवेश पूर्ण नहीं हो सका।',
+      ));
+    } on GoogleSignInException catch (error) {
+      _setError(_friendlyGoogleSignInMessage(
         language,
         error,
         'Google sign-in could not be completed.',
@@ -2628,6 +2628,7 @@ class _DevoteeShellState extends State<DevoteeShell>
     await _stopBackgroundAudio();
     try {
       if (Firebase.apps.isNotEmpty) {
+        await _signOutFromGoogleProvider();
         await FirebaseAuth.instance.signOut();
       }
     } finally {
@@ -6264,17 +6265,15 @@ class _AdminConsoleState extends State<AdminConsole> {
       status = '';
     });
     try {
-      final provider = GoogleAuthProvider()
-        ..addScope('email')
-        ..addScope('profile');
-      if (kIsWeb) {
-        await FirebaseAuth.instance.signInWithPopup(provider);
-      } else {
-        await FirebaseAuth.instance.signInWithProvider(provider);
-      }
+      await _signInToFirebaseWithGoogle();
     } on FirebaseAuthException catch (error) {
+      if (error.code == 'redirect-started') return;
       if (mounted) {
         setState(() => status = error.message ?? 'Admin sign-in failed.');
+      }
+    } on GoogleSignInException catch (error) {
+      if (mounted) {
+        setState(() => status = error.description ?? 'Admin sign-in failed.');
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -6487,7 +6486,10 @@ class _AdminConsoleState extends State<AdminConsole> {
         )),
         actions: [
           IconButton(
-            onPressed: () => FirebaseAuth.instance.signOut(),
+            onPressed: () async {
+              await _signOutFromGoogleProvider();
+              await FirebaseAuth.instance.signOut();
+            },
             icon: const Icon(Icons.logout_rounded),
             tooltip: appText(context, 'Leave account', 'प्रस्थान'),
           ),
@@ -8080,6 +8082,91 @@ String _userLabel(BuildContext context, User user) {
     return user.phoneNumber!.trim();
   }
   return appText(context, 'Devotee account', 'भक्त-सदस्यता');
+}
+
+Future<void> _ensureGoogleSignInReady() {
+  if (kIsWeb) return Future<void>.value();
+  return _googleSignInInitialization ??= GoogleSignIn.instance.initialize(
+    clientId: defaultTargetPlatform == TargetPlatform.iOS
+        ? _firebaseIosOptions.iosClientId
+        : null,
+    serverClientId: _googleServerClientId,
+  );
+}
+
+Future<UserCredential> _signInToFirebaseWithGoogle() async {
+  final provider = GoogleAuthProvider()
+    ..addScope('email')
+    ..addScope('profile');
+
+  if (kIsWeb) {
+    try {
+      return await FirebaseAuth.instance.signInWithPopup(provider);
+    } on FirebaseAuthException catch (error) {
+      if (!_shouldFallbackToRedirect(error.code)) rethrow;
+      await FirebaseAuth.instance.signInWithRedirect(provider);
+      throw FirebaseAuthException(
+        code: 'redirect-started',
+        message: 'Google sign-in redirect started.',
+      );
+    }
+  }
+
+  await _ensureGoogleSignInReady();
+  final account = await GoogleSignIn.instance.authenticate(
+    scopeHint: const <String>['email', 'profile'],
+  );
+  final authentication = account.authentication;
+  final idToken = authentication.idToken;
+
+  if (idToken == null) {
+    throw FirebaseAuthException(
+      code: 'missing-google-id-token',
+      message: 'Google did not return an ID token.',
+    );
+  }
+
+  return FirebaseAuth.instance.signInWithCredential(
+    GoogleAuthProvider.credential(idToken: idToken),
+  );
+}
+
+Future<void> _signOutFromGoogleProvider() async {
+  if (kIsWeb) return;
+  try {
+    await _ensureGoogleSignInReady();
+    await GoogleSignIn.instance.signOut();
+  } catch (_) {
+    // Firebase sign-out below is still the source of truth for app access.
+  }
+}
+
+String _friendlyGoogleSignInMessage(
+  AppLanguage language,
+  GoogleSignInException error,
+  String fallbackEnglish,
+  String fallbackHindi,
+) {
+  String localized(String english, String hindi) =>
+      language == AppLanguage.hindi ? hindi : english;
+
+  switch (error.code) {
+    case GoogleSignInExceptionCode.canceled:
+    case GoogleSignInExceptionCode.interrupted:
+      return localized(
+        'Google sign-in was closed before completion. Please begin again.',
+        'Google प्रवेश पूर्ण होने से पूर्व समाप्त हो गया। कृपया पुनः आरंभ करें।',
+      );
+    case GoogleSignInExceptionCode.clientConfigurationError:
+    case GoogleSignInExceptionCode.providerConfigurationError:
+      final detail = (error.description ?? '').trim();
+      return detail.isEmpty
+          ? '${localized(fallbackEnglish, fallbackHindi)} [google-configuration]'
+          : '${localized(fallbackEnglish, fallbackHindi)} [$detail]';
+    default:
+      final detail = (error.description ?? error.code.name).trim();
+      return '${localized(fallbackEnglish, fallbackHindi)} [$detail]';
+  }
 }
 
 String _friendlyAuthMessage(
