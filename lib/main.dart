@@ -97,7 +97,11 @@ Future<void> main() async {
   var firebaseReady = false;
 
   try {
-    await Firebase.initializeApp(options: firebaseOptions);
+    if (kIsWeb) {
+      await Firebase.initializeApp(options: _firebaseWebOptions);
+    } else {
+      await Firebase.initializeApp();
+    }
     if (kIsWeb) {
       await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
     }
@@ -8090,7 +8094,9 @@ Future<void> _ensureGoogleSignInReady() {
     clientId: defaultTargetPlatform == TargetPlatform.iOS
         ? _firebaseIosOptions.iosClientId
         : null,
-    serverClientId: _googleServerClientId,
+    serverClientId: defaultTargetPlatform == TargetPlatform.iOS
+        ? _googleServerClientId
+        : null,
   );
 }
 
