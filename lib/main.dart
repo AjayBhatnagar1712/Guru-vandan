@@ -10,6 +10,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
@@ -90,6 +91,8 @@ FirebaseOptions get firebaseOptions {
 
 ja.AudioPlayer? _backgroundAudioPlayer;
 Future<void>? _googleSignInInitialization;
+const _androidDiagnosticsChannel =
+    MethodChannel('guru_vandan/android_diagnostics');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1785,18 +1788,18 @@ class _SignInScreenState extends State<_SignInScreen> {
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       if (error.code == 'redirect-started') return;
-      _setError(_friendlyAuthMessage(
-        language,
-        error,
-        'Google sign-in could not be completed.',
-        'Google द्वारा प्रवेश पूर्ण नहीं हो सका।',
+      _setError(await _friendlyDiagnosedAuthMessage(
+        language: language,
+        error: error,
+        fallbackEnglish: 'Google sign-in could not be completed.',
+        fallbackHindi: 'Google द्वारा प्रवेश पूर्ण नहीं हो सका।',
       ));
     } on GoogleSignInException catch (error) {
-      _setError(_friendlyGoogleSignInMessage(
-        language,
-        error,
-        'Google sign-in could not be completed.',
-        'Google द्वारा प्रवेश पूर्ण नहीं हो सका।',
+      _setError(await _friendlyDiagnosedGoogleSignInMessage(
+        language: language,
+        error: error,
+        fallbackEnglish: 'Google sign-in could not be completed.',
+        fallbackHindi: 'Google द्वारा प्रवेश पूर्ण नहीं हो सका।',
       ));
     } catch (_) {
       _setError(googleCouldNotComplete);
@@ -8179,6 +8182,28 @@ String _friendlyGoogleSignInMessage(
   }
 }
 
+Future<String> _friendlyDiagnosedGoogleSignInMessage({
+  required AppLanguage language,
+  required GoogleSignInException error,
+  required String fallbackEnglish,
+  required String fallbackHindi,
+}) async {
+  final message = _friendlyGoogleSignInMessage(
+    language,
+    error,
+    fallbackEnglish,
+    fallbackHindi,
+  );
+  if (!_isCertificateHashFailure(
+    error.code.name,
+    error.description,
+    message,
+  )) {
+    return message;
+  }
+  return _withAndroidSignatureDiagnostic(message);
+}
+
 String _friendlyAuthMessage(
   AppLanguage language,
   FirebaseAuthException error,
@@ -8227,6 +8252,67 @@ String _friendlyAuthMessage(
       );
     default:
       return '${localized(fallbackEnglish, fallbackHindi)} [${error.code}]';
+  }
+}
+
+Future<String> _friendlyDiagnosedAuthMessage({
+  required AppLanguage language,
+  required FirebaseAuthException error,
+  required String fallbackEnglish,
+  required String fallbackHindi,
+}) async {
+  final message = _friendlyAuthMessage(
+    language,
+    error,
+    fallbackEnglish,
+    fallbackHindi,
+  );
+  if (!_isCertificateHashFailure(error.code, error.message, message)) {
+    return message;
+  }
+  return _withAndroidSignatureDiagnostic(message);
+}
+
+bool _isCertificateHashFailure(
+  String code,
+  String? description,
+  String message,
+) {
+  final haystack = '$code ${description ?? ''} $message'.toLowerCase();
+  return haystack.contains('invalid-cert-hash') ||
+      haystack.contains('certificate') && haystack.contains('hash');
+}
+
+Future<String> _withAndroidSignatureDiagnostic(String message) async {
+  final diagnostic = await _androidSignatureDiagnostic();
+  if (diagnostic == null || diagnostic.isEmpty) return message;
+  return '$message\n\n$diagnostic';
+}
+
+Future<String?> _androidSignatureDiagnostic() async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
+  try {
+    final details = await _androidDiagnosticsChannel
+        .invokeMapMethod<String, Object?>('appSignatureInfo');
+    if (details == null) return null;
+
+    final versionName = details['versionName']?.toString().trim();
+    final versionCode = details['versionCode']?.toString().trim();
+    final packageName = details['packageName']?.toString().trim();
+    final sha1 = details['sha1']?.toString().trim();
+    final sha256 = details['sha256']?.toString().trim();
+
+    return [
+      'Installed app check:',
+      if (packageName != null && packageName.isNotEmpty)
+        'Package: $packageName',
+      if (versionName != null && versionName.isNotEmpty)
+        'Version: $versionName${versionCode == null || versionCode.isEmpty ? '' : '+$versionCode'}',
+      if (sha1 != null && sha1.isNotEmpty) 'SHA-1: $sha1',
+      if (sha256 != null && sha256.isNotEmpty) 'SHA-256: $sha256',
+    ].join('\n');
+  } catch (_) {
+    return null;
   }
 }
 
