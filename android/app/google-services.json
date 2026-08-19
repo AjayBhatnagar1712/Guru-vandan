@@ -23,6 +23,14 @@
           }
         },
         {
+          "client_id": "540841544767-5a9klaagrdhpfhsdmd057e7t8ulk3fo5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ivar.guruvandan",
+            "certificate_hash": "026d35f92d3950b325e70f5540a330f386b19416"
+          }
+        },
+        {
           "client_id": "540841544767-bmuqak2h7fab0lmhqssr6ppq77rk49gq.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
