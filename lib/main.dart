@@ -8097,7 +8097,8 @@ Future<void> _ensureGoogleSignInReady() {
     clientId: defaultTargetPlatform == TargetPlatform.iOS
         ? _firebaseIosOptions.iosClientId
         : null,
-    serverClientId: defaultTargetPlatform == TargetPlatform.iOS
+    serverClientId: defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS
         ? _googleServerClientId
         : null,
   );
@@ -8121,10 +8122,6 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
     }
   }
 
-  if (defaultTargetPlatform == TargetPlatform.android) {
-    return FirebaseAuth.instance.signInWithProvider(provider);
-  }
-
   await _ensureGoogleSignInReady();
   final account = await GoogleSignIn.instance.authenticate(
     scopeHint: const <String>['email', 'profile'],
@@ -8145,7 +8142,7 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
 }
 
 Future<void> _signOutFromGoogleProvider() async {
-  if (kIsWeb || defaultTargetPlatform == TargetPlatform.android) return;
+  if (kIsWeb) return;
   try {
     await _ensureGoogleSignInReady();
     await GoogleSignIn.instance.signOut();
