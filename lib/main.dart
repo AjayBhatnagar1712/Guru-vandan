@@ -7670,61 +7670,64 @@ class _AboutAccordionCard extends StatelessWidget {
               splashColor: accentColor.withValues(alpha: 0.08),
               highlightColor: accentColor.withValues(alpha: 0.05),
             ),
-            child: ExpansionTile(
-              maintainState: true,
-              tilePadding: const EdgeInsets.fromLTRB(22, 10, 16, 10),
-              childrenPadding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              iconColor: accentColor,
-              collapsedIconColor: AppColors.taupe,
-              leading: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: accentColor.withValues(alpha: 0.22),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ExpansionTile(
+                maintainState: true,
+                tilePadding: const EdgeInsets.fromLTRB(22, 10, 16, 10),
+                childrenPadding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
+                expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                iconColor: accentColor,
+                collapsedIconColor: AppColors.taupe,
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.22),
+                    ),
                   ),
+                  child: Icon(icon, color: accentColor, size: 23),
                 ),
-                child: Icon(icon, color: accentColor, size: 23),
-              ),
-              title: Text(
-                title,
-                style: _bodyStyle(
-                  language,
-                  color: accentColor,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  summary,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                title: Text(
+                  title,
                   style: _bodyStyle(
                     language,
-                    color: AppColors.taupe,
+                    color: accentColor,
                     fontSize: 15,
-                    height: 1.25,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    summary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _bodyStyle(
+                      language,
+                      color: AppColors.taupe,
+                      fontSize: 15,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                children: [
+                  Text(
+                    body,
+                    style: _bodyStyle(
+                      language,
+                      color: AppColors.ink,
+                      fontSize: 18,
+                      height: 1.56,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              children: [
-                Text(
-                  body,
-                  style: _bodyStyle(
-                    language,
-                    color: AppColors.ink,
-                    fontSize: 18,
-                    height: 1.56,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
             ),
           ),
         ],
