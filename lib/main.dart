@@ -319,11 +319,9 @@ class _AppIconMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipOval(
-      child: Image.asset(
-        'assets/images/app_icon.png',
-        fit: BoxFit.cover,
-      ),
+    return Image.asset(
+      'assets/images/app_icon.png',
+      fit: BoxFit.contain,
     );
   }
 }
@@ -390,23 +388,9 @@ class _FirstLaunchLanguageScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Center(
-                        child: Container(
+                        child: SizedBox(
                           width: 126,
                           height: 126,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.borderStrong),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.deepCrimson
-                                    .withValues(alpha: 0.12),
-                                blurRadius: 28,
-                                offset: const Offset(0, 14),
-                              ),
-                            ],
-                          ),
                           child: const _AppIconMark(),
                         ),
                       ),
@@ -1441,30 +1425,10 @@ class _OpeningScreen extends StatelessWidget {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Container(
+                              SizedBox(
                                 width: 132,
                                 height: 132,
-                                padding: const EdgeInsets.all(13),
-                                decoration: BoxDecoration(
-                                  color: AppColors.offWhite
-                                      .withValues(alpha: 0.92),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: AppColors.softGold, width: 2),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.deepCrimson
-                                          .withValues(alpha: 0.18),
-                                      blurRadius: 30,
-                                      offset: const Offset(0, 18),
-                                    ),
-                                  ],
-                                ),
-                                child: ClipOval(
-                                  child: Image.asset(
-                                      'assets/images/app_icon.png',
-                                      fit: BoxFit.cover),
-                                ),
+                                child: const _AppIconMark(),
                               ),
                               const SizedBox(height: 28),
                               Text(
@@ -1998,15 +1962,9 @@ class _SignInScreenState extends State<_SignInScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Center(
-                          child: Container(
+                          child: SizedBox(
                             width: 116,
                             height: 116,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.borderStrong),
-                            ),
                             child: const _AppIconMark(),
                           ),
                         ),
@@ -3323,15 +3281,9 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Center(
-                  child: Container(
+                  child: SizedBox(
                     width: 118,
                     height: 118,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.borderStrong),
-                    ),
                     child: const _AppIconMark(),
                   ),
                 ),
@@ -3889,8 +3841,7 @@ class _HomeScreen extends StatelessWidget {
             children: [
               _ScreenTitle(
                 icon: Icons.format_quote_rounded,
-                title: appText(context, 'Sadguru\'s Daily Word',
-                    'à¤¨à¤¿à¤¤à¥à¤¯ à¤¸à¤¦à¥à¤—à¥à¤°à¥-à¤µà¤¾à¤£à¥€'),
+                title: appText(context, 'Guru Vani', 'गुरु वाणी'),
                 subtitle: appText(
                   context,
                   'A brief teaching to carry in remembrance throughout the day.',
@@ -5490,8 +5441,7 @@ class _WisdomScreen extends StatelessWidget {
           children: [
             _ScreenTitle(
               icon: Icons.format_quote_rounded,
-              title: appText(
-                  context, 'Sadguru\'s Daily Word', 'नित्य सद्गुरु-वाणी'),
+              title: appText(context, 'Guru Vani', 'गुरु वाणी'),
               subtitle: appText(
                 context,
                 'A brief teaching to carry in remembrance throughout the day.',
@@ -5710,15 +5660,9 @@ class _MoreScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
+                    SizedBox(
                       width: 126,
                       height: 126,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.offWhite,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.borderStrong),
-                      ),
                       child: const _AppIconMark(),
                     ),
                     const SizedBox(height: 22),
