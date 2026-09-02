@@ -1748,8 +1748,14 @@ class _SignInScreenState extends State<_SignInScreen> {
     });
 
     try {
-      await _signInToFirebaseWithGoogle();
+      await _signInToFirebaseWithGoogle(
+        confirmAccountLink: _confirmAccountLink,
+      );
       widget.onSignedIn?.call();
+    } on _AuthFlowCanceled {
+      // The user intentionally closed a provider or account-linking flow.
+    } on _AuthIntegrityException catch (error) {
+      _setError(error.message);
     } on FirebaseAuthException catch (error) {
       if (error.code == 'redirect-started') return;
       _setError(await _friendlyDiagnosedAuthMessage(
@@ -1770,6 +1776,94 @@ class _SignInScreenState extends State<_SignInScreen> {
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> _signInWithApple() async {
+    final language = LanguageScope.of(context).language;
+    final appleCouldNotComplete = appText(
+      context,
+      'Sign in with Apple could not be completed.',
+      'Apple द्वारा प्रवेश पूर्ण नहीं हो सका।',
+    );
+
+    setState(() {
+      busy = true;
+      status = null;
+      statusIsError = false;
+    });
+
+    try {
+      await _signInToFirebaseWithApple(
+        confirmAccountLink: _confirmAccountLink,
+      );
+      widget.onSignedIn?.call();
+    } on _AuthFlowCanceled {
+      // The user intentionally closed a provider or account-linking flow.
+    } on _AuthIntegrityException catch (error) {
+      _setError(error.message);
+    } on FirebaseAuthException catch (error) {
+      _setError(await _friendlyDiagnosedAuthMessage(
+        language: language,
+        error: error,
+        fallbackEnglish: 'Sign in with Apple could not be completed.',
+        fallbackHindi: 'Apple द्वारा प्रवेश पूर्ण नहीं हो सका।',
+      ));
+    } catch (_) {
+      _setError(appleCouldNotComplete);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<bool> _confirmAccountLink(
+    String existingProvider,
+    String email,
+  ) async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            icon: const Icon(
+              Icons.link_rounded,
+              color: AppColors.maroon,
+              size: 34,
+            ),
+            title: Text(
+              appText(
+                context,
+                'Securely link your sign-ins',
+                'अपने प्रवेश सुरक्षित रूप से जोड़ें',
+              ),
+              textAlign: TextAlign.center,
+            ),
+            content: Text(
+              appText(
+                context,
+                'A Guru Vandan account already uses $email. Continue with $existingProvider to verify that account and securely link both sign-in methods. Your profile and routine data will remain in one account.',
+                '$email से एक गुरुवंदन सदस्यता पहले से जुड़ी है। उस सदस्यता को प्रमाणित करने और दोनों प्रवेश-विधियों को सुरक्षित रूप से जोड़ने के लिए $existingProvider से आगे बढ़ें। आपका परिचय और साधना-विवरण एक ही सदस्यता में रहेगा।',
+              ),
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(appText(context, 'Cancel', 'निरस्त करें')),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.verified_user_rounded),
+                label: Text(appText(
+                  context,
+                  'Continue securely',
+                  'सुरक्षित रूप से आगे बढ़ें',
+                )),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _sendOtp() async {
@@ -1988,8 +2082,12 @@ class _SignInScreenState extends State<_SignInScreen> {
                         Text(
                           appText(
                             context,
-                            'Enter your sacred daily practice through Google.',
-                            'अपनी नित्य आध्यात्मिक साधना में प्रवेश हेतु Google का चयन करें।',
+                            _appleSignInAvailable
+                                ? 'Enter your sacred daily practice with Apple or Google.'
+                                : 'Enter your sacred daily practice through Google.',
+                            _appleSignInAvailable
+                                ? 'अपनी नित्य आध्यात्मिक साधना में प्रवेश हेतु Apple अथवा Google का चयन करें।'
+                                : 'अपनी नित्य आध्यात्मिक साधना में प्रवेश हेतु Google का चयन करें।',
                           ),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyLarge,
@@ -2009,6 +2107,20 @@ class _SignInScreenState extends State<_SignInScreen> {
                             backgroundColor: AppColors.maroon,
                           ),
                         ),
+                        if (_appleSignInAvailable) ...[
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            key: const Key('sign-in-with-apple'),
+                            onPressed: busy ? null : _signInWithApple,
+                            icon: const Icon(Icons.apple),
+                            label: const Text('Sign in with Apple'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(58),
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
                         if (_phoneSignInEnabled) ...[
                           const SizedBox(height: 20),
                           Row(
@@ -2162,6 +2274,7 @@ class _DevoteeShellState extends State<DevoteeShell>
   MeditationChantPhase? meditationChantPhase;
   DateTime? meditationEndsAt;
   bool welcomeDialogShown = false;
+  bool accountDeletionInProgress = false;
   Timer? meditationTimer;
 
   @override
@@ -2600,6 +2713,56 @@ class _DevoteeShellState extends State<DevoteeShell>
       if (mounted) {
         setState(() => showSignInAfterLogout = true);
       }
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || widget.user == null || user.uid != widget.user!.uid) {
+      throw const _AuthIntegrityException(
+        'Your signed-in session could not be verified. Sign in again before deleting the account.',
+      );
+    }
+
+    if (mounted) setState(() => accountDeletionInProgress = true);
+    try {
+      final authorization = await _reauthenticateForAccountDeletion(user);
+
+      final appleAuthorizationCode = authorization.appleAuthorizationCode;
+      if (appleAuthorizationCode != null) {
+        await FirebaseAuth.instance
+            .revokeTokenWithAuthorizationCode(appleAuthorizationCode);
+      }
+
+      if (authorization.hasGoogleProvider) {
+        try {
+          await _ensureGoogleSignInReady();
+          await GoogleSignIn.instance.disconnect();
+        } catch (_) {
+          // Firebase account deletion below still permanently removes the
+          // Google sign-in association from Guru Vandan.
+        }
+      }
+
+      await FirebaseDatabase.instance
+          .ref('users/${user.uid}')
+          .remove()
+          .timeout(const Duration(seconds: 12));
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('$nameKey:${user.uid}');
+      await prefs.remove('$routineKey:${user.uid}');
+      await prefs.remove(nameKey);
+      await prefs.remove(routineKey);
+
+      await user.delete();
+      await _signOutFromGoogleProvider();
+
+      if (mounted) {
+        setState(() => showSignInAfterLogout = true);
+      }
+    } finally {
+      if (mounted) setState(() => accountDeletionInProgress = false);
     }
   }
 
@@ -3165,6 +3328,8 @@ class _DevoteeShellState extends State<DevoteeShell>
         profile: devoteeProfile!,
         onProfileChanged: _saveProfile,
         onSignOut: _signOut,
+        onDeleteAccount: _deleteAccount,
+        accountDeletionInProgress: accountDeletionInProgress,
       ),
     };
 
@@ -5583,12 +5748,16 @@ class _MoreScreen extends StatelessWidget {
     required this.profile,
     required this.onProfileChanged,
     required this.onSignOut,
+    required this.onDeleteAccount,
+    required this.accountDeletionInProgress,
   });
 
   final User? user;
   final DevoteeProfile profile;
   final Future<void> Function(DevoteeProfile profile) onProfileChanged;
   final Future<void> Function() onSignOut;
+  final Future<void> Function() onDeleteAccount;
+  final bool accountDeletionInProgress;
 
   Future<void> _editName(BuildContext context) async {
     final updated = await showDialog<DevoteeProfile>(
@@ -5636,6 +5805,93 @@ class _MoreScreen extends StatelessWidget {
     );
 
     if (confirmed == true) await onSignOut();
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(
+          Icons.delete_forever_rounded,
+          color: Color(0xFFB3261E),
+          size: 36,
+        ),
+        title: Text(
+          appText(
+            context,
+            'Permanently delete account?',
+            'सदस्यता स्थायी रूप से मिटाएँ?',
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          appText(
+            context,
+            'This permanently deletes your Guru Vandan account, profile, routine history, and app sign-in access from this device and Firebase. Linked Apple or Google authorization will be revoked where available. This cannot be undone.',
+            'यह आपकी गुरुवंदन सदस्यता, परिचय, साधना-इतिहास और ऐप प्रवेश को इस उपकरण तथा Firebase से स्थायी रूप से मिटा देगा। उपलब्ध होने पर संबद्ध Apple अथवा Google अनुमति भी निरस्त की जाएगी। इसे वापस नहीं किया जा सकता।',
+          ),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(appText(context, 'Cancel', 'निरस्त करें')),
+          ),
+          FilledButton.icon(
+            key: const Key('confirm-delete-account'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_forever_rounded),
+            label: Text(appText(
+              context,
+              'Delete permanently',
+              'स्थायी रूप से मिटाएँ',
+            )),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB3261E),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await onDeleteAccount();
+    } on _AuthFlowCanceled {
+      return;
+    } on _AuthIntegrityException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } on FirebaseAuthException catch (error) {
+      if (!context.mounted) return;
+      final message = error.code == 'requires-recent-login'
+          ? appText(
+              context,
+              'For security, sign out, sign in again, and retry account deletion.',
+              'सुरक्षा हेतु प्रस्थान करके पुनः प्रवेश करें और सदस्यता मिटाने का प्रयास दोहराएँ।',
+            )
+          : appText(
+              context,
+              'Account deletion could not be completed. Sign in again and retry. If the problem continues, contact support so we can verify and complete deletion.',
+              'सदस्यता-विलोपन पूर्ण नहीं हो सका। पुनः प्रवेश करके प्रयास दोहराएँ। समस्या बनी रहे तो विलोपन की पुष्टि और पूर्णता हेतु सहायता से संपर्क करें।',
+            );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(appText(
+          context,
+          'Account deletion could not be completed. Check your connection and try again.',
+          'सदस्यता-विलोपन पूर्ण नहीं हो सका। संपर्क जाँचकर पुनः प्रयास करें।',
+        )),
+      ));
+    }
   }
 
   @override
@@ -5732,7 +5988,9 @@ class _MoreScreen extends StatelessWidget {
                 ),
               ),
               FilledButton.icon(
-                onPressed: () => _confirmSignOut(context),
+                onPressed: accountDeletionInProgress
+                    ? null
+                    : () => _confirmSignOut(context),
                 icon: const Icon(Icons.logout_rounded),
                 label: Text(appText(context, 'Logout', 'प्रस्थान')),
                 style: FilledButton.styleFrom(
@@ -5740,6 +5998,38 @@ class _MoreScreen extends StatelessWidget {
                   backgroundColor: AppColors.maroon,
                 ),
               ),
+              if (user != null) ...[
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  key: const Key('delete-account'),
+                  onPressed: accountDeletionInProgress
+                      ? null
+                      : () => _confirmDeleteAccount(context),
+                  icon: accountDeletionInProgress
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_forever_rounded),
+                  label: Text(accountDeletionInProgress
+                      ? appText(
+                          context,
+                          'Deleting account...',
+                          'सदस्यता मिटाई जा रही है...',
+                        )
+                      : appText(
+                          context,
+                          'Delete account permanently',
+                          'सदस्यता स्थायी रूप से मिटाएँ',
+                        )),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(58),
+                    foregroundColor: const Color(0xFFB3261E),
+                    backgroundColor: AppColors.offWhite,
+                    side: const BorderSide(color: Color(0xFFB3261E)),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -8051,7 +8341,137 @@ Future<void> _ensureGoogleSignInReady() {
   );
 }
 
-Future<UserCredential> _signInToFirebaseWithGoogle() async {
+typedef _ConfirmAccountLink = Future<bool> Function(
+  String existingProvider,
+  String email,
+);
+
+class _AuthFlowCanceled implements Exception {
+  const _AuthFlowCanceled();
+}
+
+class _AuthIntegrityException implements Exception {
+  const _AuthIntegrityException(this.message);
+
+  final String message;
+}
+
+bool get _appleSignInAvailable =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+bool _isAccountProviderConflict(FirebaseAuthException error) =>
+    error.code == 'account-exists-with-different-credential' ||
+    error.code == 'email-already-in-use';
+
+String? _accountLinkEmail(FirebaseAuthException error) {
+  final email = error.email?.trim();
+  return email == null || email.isEmpty ? null : email;
+}
+
+Future<AuthCredential> _googleFirebaseCredential() async {
+  await _ensureGoogleSignInReady();
+  final account = await GoogleSignIn.instance.authenticate(
+    scopeHint: const <String>['email', 'profile'],
+  );
+  final idToken = account.authentication.idToken;
+
+  if (idToken == null) {
+    throw const _AuthIntegrityException(
+      'Google did not return the secure identity token needed to sign in. Please try again.',
+    );
+  }
+
+  return GoogleAuthProvider.credential(idToken: idToken);
+}
+
+AppleAuthProvider _appleAuthProvider() => AppleAuthProvider()
+  ..addScope('email')
+  ..addScope('name');
+
+Future<UserCredential> _directSignInWithApple() {
+  final provider = _appleAuthProvider();
+  return kIsWeb
+      ? FirebaseAuth.instance.signInWithPopup(provider)
+      : FirebaseAuth.instance.signInWithProvider(provider);
+}
+
+Future<UserCredential> _linkCredentialToVerifiedAccount({
+  required UserCredential verifiedAccount,
+  required AuthCredential pendingCredential,
+  required String expectedEmail,
+}) async {
+  final user = verifiedAccount.user;
+  if (user == null) {
+    throw const _AuthIntegrityException(
+      'The existing account could not be verified. No accounts were linked.',
+    );
+  }
+
+  final verifiedEmail = user.email?.trim().toLowerCase();
+  final normalizedExpected = expectedEmail.trim().toLowerCase();
+  if (!user.emailVerified ||
+      !normalizedExpected.contains('@') ||
+      verifiedEmail != normalizedExpected) {
+    await FirebaseAuth.instance.signOut();
+    throw const _AuthIntegrityException(
+      'The verified account uses a different email address. For your security, no accounts were linked.',
+    );
+  }
+
+  try {
+    return await user.linkWithCredential(pendingCredential);
+  } on FirebaseAuthException catch (error) {
+    if (error.code == 'provider-already-linked') return verifiedAccount;
+    await FirebaseAuth.instance.signOut();
+    if (error.code == 'credential-already-in-use') {
+      throw const _AuthIntegrityException(
+        'These sign-ins are already attached to separate Guru Vandan accounts. No data was changed. Contact support before attempting to merge them.',
+      );
+    }
+    rethrow;
+  } catch (_) {
+    await FirebaseAuth.instance.signOut();
+    rethrow;
+  }
+}
+
+Future<UserCredential> _signInToFirebaseWithApple({
+  _ConfirmAccountLink? confirmAccountLink,
+}) async {
+  try {
+    return await _directSignInWithApple();
+  } on FirebaseAuthException catch (error) {
+    if (!_isAccountProviderConflict(error)) rethrow;
+
+    final pendingAppleCredential = error.credential;
+    if (pendingAppleCredential == null || confirmAccountLink == null) {
+      throw const _AuthIntegrityException(
+        'This email already belongs to another sign-in method, but the secure Apple credential could not be linked. No account was created.',
+      );
+    }
+
+    final email = _accountLinkEmail(error);
+    if (email == null) {
+      throw const _AuthIntegrityException(
+        'The existing account email could not be securely verified. No accounts were linked.',
+      );
+    }
+    final confirmed = await confirmAccountLink('Google', email);
+    if (!confirmed) throw const _AuthFlowCanceled();
+
+    final verifiedGoogleAccount = await FirebaseAuth.instance
+        .signInWithCredential(await _googleFirebaseCredential());
+    return _linkCredentialToVerifiedAccount(
+      verifiedAccount: verifiedGoogleAccount,
+      pendingCredential: pendingAppleCredential,
+      expectedEmail: email,
+    );
+  }
+}
+
+Future<UserCredential> _signInToFirebaseWithGoogle({
+  _ConfirmAccountLink? confirmAccountLink,
+}) async {
   final provider = GoogleAuthProvider()
     ..addScope('email')
     ..addScope('profile');
@@ -8069,23 +8489,33 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
     }
   }
 
-  await _ensureGoogleSignInReady();
-  final account = await GoogleSignIn.instance.authenticate(
-    scopeHint: const <String>['email', 'profile'],
-  );
-  final authentication = account.authentication;
-  final idToken = authentication.idToken;
+  final pendingGoogleCredential = await _googleFirebaseCredential();
+  try {
+    return await FirebaseAuth.instance
+        .signInWithCredential(pendingGoogleCredential);
+  } on FirebaseAuthException catch (error) {
+    if (!_isAccountProviderConflict(error) ||
+        !_appleSignInAvailable ||
+        confirmAccountLink == null) {
+      rethrow;
+    }
 
-  if (idToken == null) {
-    throw FirebaseAuthException(
-      code: 'missing-google-id-token',
-      message: 'Google did not return an ID token.',
+    final email = _accountLinkEmail(error);
+    if (email == null) {
+      throw const _AuthIntegrityException(
+        'The existing account email could not be securely verified. No accounts were linked.',
+      );
+    }
+    final confirmed = await confirmAccountLink('Apple', email);
+    if (!confirmed) throw const _AuthFlowCanceled();
+
+    final verifiedAppleAccount = await _directSignInWithApple();
+    return _linkCredentialToVerifiedAccount(
+      verifiedAccount: verifiedAppleAccount,
+      pendingCredential: error.credential ?? pendingGoogleCredential,
+      expectedEmail: email,
     );
   }
-
-  return FirebaseAuth.instance.signInWithCredential(
-    GoogleAuthProvider.credential(idToken: idToken),
-  );
 }
 
 Future<void> _signOutFromGoogleProvider() async {
@@ -8096,6 +8526,65 @@ Future<void> _signOutFromGoogleProvider() async {
   } catch (_) {
     // Firebase sign-out below is still the source of truth for app access.
   }
+}
+
+class _DeletionAuthorization {
+  const _DeletionAuthorization({
+    required this.hasGoogleProvider,
+    this.appleAuthorizationCode,
+  });
+
+  final bool hasGoogleProvider;
+  final String? appleAuthorizationCode;
+}
+
+Future<_DeletionAuthorization> _reauthenticateForAccountDeletion(
+  User user,
+) async {
+  final providerIds =
+      user.providerData.map((provider) => provider.providerId).toSet();
+  final hasApple = providerIds.contains(AppleAuthProvider.PROVIDER_ID);
+  final hasGoogle = providerIds.contains(GoogleAuthProvider.PROVIDER_ID);
+
+  if (hasApple) {
+    if (!_appleSignInAvailable) {
+      throw const _AuthIntegrityException(
+        'Open Guru Vandan on an Apple device to securely verify and delete this Apple-linked account.',
+      );
+    }
+
+    final result = await user.reauthenticateWithProvider(_appleAuthProvider());
+    final authorizationCode =
+        result.additionalUserInfo?.authorizationCode?.trim();
+    if (authorizationCode == null || authorizationCode.isEmpty) {
+      throw const _AuthIntegrityException(
+        'Apple verification did not return the authorization needed to revoke app access. Nothing was deleted; please try again.',
+      );
+    }
+
+    return _DeletionAuthorization(
+      hasGoogleProvider: hasGoogle,
+      appleAuthorizationCode: authorizationCode,
+    );
+  }
+
+  if (hasGoogle) {
+    if (kIsWeb) {
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
+      await user.reauthenticateWithPopup(provider);
+    } else {
+      await user.reauthenticateWithCredential(
+        await _googleFirebaseCredential(),
+      );
+    }
+    return const _DeletionAuthorization(hasGoogleProvider: true);
+  }
+
+  throw const _AuthIntegrityException(
+    'This account has no supported sign-in provider for secure deletion. Sign out and contact Guru Vandan support.',
+  );
 }
 
 String _friendlyGoogleSignInMessage(
