@@ -104,6 +104,36 @@ void main() {
     expect(profile.fullName, 'Ravi Kumar');
   });
 
+  test('Apple identity creates a profile without separate name onboarding', () {
+    final profile = profileForAuthenticatedProvider(
+      providerIds: const ['apple.com'],
+      displayName: 'Ajay Kumar Bhatnagar',
+    );
+
+    expect(profile, isNotNull);
+    expect(profile!.firstName, 'Ajay');
+    expect(profile.middleName, 'Kumar');
+    expect(profile.lastName, 'Bhatnagar');
+  });
+
+  test('Returning Apple user without a shared name is not blocked', () {
+    final profile = profileForAuthenticatedProvider(
+      providerIds: const ['apple.com'],
+    );
+
+    expect(profile, isNotNull);
+    expect(profile!.displayName, 'Devotee');
+  });
+
+  test('Non-Apple identity does not bypass normal profile onboarding', () {
+    final profile = profileForAuthenticatedProvider(
+      providerIds: const ['google.com'],
+      displayName: 'Ajay Bhatnagar',
+    );
+
+    expect(profile, isNull);
+  });
+
   test('Cloud user activity is parsed into meditation statistics', () {
     final now = DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));

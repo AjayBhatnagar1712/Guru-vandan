@@ -693,6 +693,20 @@ class DevoteeProfile {
   }
 }
 
+DevoteeProfile? profileForAuthenticatedProvider({
+  required Iterable<String> providerIds,
+  String? displayName,
+}) {
+  if (!providerIds.contains(AppleAuthProvider.PROVIDER_ID)) return null;
+
+  // Apple supplies the user's name only on the first authorization. Firebase
+  // normally preserves it as displayName, but returning Apple users may not
+  // have one. They must still be able to enter the app without being asked to
+  // provide identity information that Sign in with Apple already handles.
+  return DevoteeProfile.fromStoredValue(displayName) ??
+      const DevoteeProfile(firstName: 'Devotee');
+}
+
 class SatsangTrack {
   const SatsangTrack({
     required this.id,
@@ -2452,6 +2466,14 @@ class _DevoteeShellState extends State<DevoteeShell>
       savedProfile = DevoteeProfile.fromStoredValue(prefs.getString(nameKey));
     }
     savedProfile ??= await _loadCloudProfile();
+    final user = widget.user;
+    savedProfile ??= user == null
+        ? null
+        : profileForAuthenticatedProvider(
+            providerIds:
+                user.providerData.map((provider) => provider.providerId),
+            displayName: user.displayName,
+          );
 
     if (savedProfile != null) {
       devoteeProfile = savedProfile;
