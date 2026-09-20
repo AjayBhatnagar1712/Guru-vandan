@@ -5,6 +5,8 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
 
 permissions:
   contents: read
@@ -39,6 +41,11 @@ jobs:
 
       - name: Build web
         run: flutter build web --release --base-href /Guru-vandan/ --no-wasm-dry-run
+
+      - name: Generate quote share cards
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python .github/scripts/generate_quote_pages.py build/web
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

@@ -51,7 +51,7 @@ void main() {
     expect(find.text('Today\'s Sacred Practice'), findsNothing);
   });
 
-  test('Firebase quote records retain English and Hindi versions', () {
+  test('Firebase quote records normalize legacy author names', () {
     final quote = WisdomQuote.fromEntry('quote-id', {
       'textEnglish': 'Meditation brings clarity.',
       'textHindi': 'ध्यान स्पष्टता लाता है।',
@@ -62,8 +62,8 @@ void main() {
 
     expect(quote.text, 'Meditation brings clarity.');
     expect(quote.textHindi, 'ध्यान स्पष्टता लाता है।');
-    expect(quote.author, 'Sadguru Maharaj');
-    expect(quote.authorHindi, 'सद्गुरु महाराज');
+    expect(quote.author, 'Maharshi Mehi Paramhans');
+    expect(quote.authorHindi, 'महर्षि मेंही परमहंस');
     expect(quote.createdAt, 1234);
   });
 
@@ -89,6 +89,48 @@ void main() {
     expect(quotes, hasLength(20));
     expect(quotes.first.text, 'Sacred quote 20');
     expect(quotes.last.text, 'Sacred quote 1');
+  });
+
+  test('Quote queue advances one quote per calendar day', () {
+    const quotes = [
+      WisdomQuote(id: 'oldest', text: 'First', createdAt: 1),
+      WisdomQuote(id: 'middle', text: 'Second', createdAt: 2),
+      WisdomQuote(id: 'newest', text: 'Third', createdAt: 3),
+    ];
+
+    final firstDay = quoteTimelineForDate(
+      quotes,
+      now: DateTime(2026, 9, 13),
+    );
+    final secondDay = quoteTimelineForDate(
+      quotes,
+      now: DateTime(2026, 9, 14),
+    );
+
+    expect(firstDay.daily?.id, 'newest');
+    expect(firstDay.archive, isEmpty);
+    expect(firstDay.upcoming.map((quote) => quote.id), ['middle', 'oldest']);
+    expect(secondDay.daily?.id, 'middle');
+    expect(secondDay.archive.map((quote) => quote.id), ['newest']);
+    expect(secondDay.upcoming.map((quote) => quote.id), ['oldest']);
+    expect(nextQuoteScheduleDate(quotes, now: DateTime(2026, 9, 13)),
+        DateTime(2026, 9, 16));
+  });
+
+  test('Quote links identify the exact quote on web and in the app', () {
+    const quote = WisdomQuote(id: 'firebase-quote-1', text: 'A quote');
+    expect(
+      wisdomQuoteShareLink(quote),
+      'https://ajaybhatnagar1712.github.io/Guru-vandan/quote/firebase-quote-1/',
+    );
+    expect(
+      quoteIdFromUri(Uri.parse('guruvandan://quote/firebase-quote-1')),
+      'firebase-quote-1',
+    );
+    expect(
+      quoteIdFromUri(Uri.parse(wisdomQuoteShareLink(quote))),
+      'firebase-quote-1',
+    );
   });
 
   test('Legacy Android user names are recognized as existing profiles', () {
@@ -155,6 +197,46 @@ void main() {
     expect(activity.count(RoutineTask.morningSatsang), 1);
   });
 
+  test('Detailed activity parses playback time and quote engagement', () {
+    final activity = DevoteeActivity.fromEntry('uid-analytics', {
+      'name': 'Meera',
+      'activity': {
+        'event-1': {
+          'type': 'satsang_listened',
+          'timestamp': 1700000000000,
+          'durationSeconds': 620,
+          'label': 'Morning satsang',
+        },
+        'event-2': {
+          'type': 'meditation_session',
+          'timestamp': 1700000060000,
+          'durationSeconds': 300,
+          'plannedDurationSeconds': 300,
+          'completed': true,
+        },
+        'event-3': {
+          'type': 'quote_shared',
+          'timestamp': 1700000120000,
+          'contentId': 'quote-1',
+        },
+      },
+      'likedQuotes': {'quote-1': true, 'quote-2': false},
+    });
+
+    expect(activity.events, hasLength(3));
+    expect(activity.satsangSeconds, 620);
+    expect(activity.meditationSeconds, 300);
+    expect(activity.quoteShares, 1);
+    expect(activity.quoteLikes, 1);
+    expect(activity.events.first.type, 'quote_shared');
+  });
+
+  test('Activity durations use compact admin labels', () {
+    expect(formatActivityDuration(42), '42s');
+    expect(formatActivityDuration(300), '5m');
+    expect(formatActivityDuration(3900), '1h 5m');
+  });
+
   testWidgets('Guruvandan home renders with first name', (tester) async {
     SharedPreferences.setMockInitialValues({
       'guruvandan_flutter:name': 'Ajay Bhatnagar',
@@ -170,6 +252,33 @@ void main() {
     expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Bhatnagar'), findsNothing);
     expect(find.text('Today\'s Sacred Practice'), findsOneWidget);
+    expect(find.text('Yesterday'), findsNothing);
+
+    final practiceTop =
+        tester.getTopLeft(find.text('Today\'s Sacred Practice'));
+    final streakTop = tester.getTopLeft(find.text('Continuity of meditation'));
+    expect(practiceTop.dy, lessThan(streakTop.dy));
+  });
+
+  testWidgets('Admin route opens the dedicated email and password entrance',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'english',
+    });
+
+    await tester.pumpWidget(
+      const GuruvandanApp(firebaseReady: false, showOpening: false),
+    );
+    await tester.pumpAndSettle();
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pushNamed('/admin');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Admin Entrance'), findsOneWidget);
+    expect(find.text('Admin email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('guruvandan11@trustkeyper.com'), findsOneWidget);
   });
 
   testWidgets('Streak counts meditation days only', (tester) async {
@@ -210,10 +319,11 @@ void main() {
     expect(best.data, '2');
     expect(total.data, '3');
     expect(find.text('Continuity of meditation'), findsOneWidget);
+    expect(find.text('Yesterday'), findsOneWidget);
     expect(
       find.text(
           'Every sincere meditation, of any duration, keeps the continuity.'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.text('Complete all three practices to grow your streak.'),
@@ -260,11 +370,7 @@ void main() {
     await tester.tap(find.text('Morning'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-          'Sacred morning, evening, and aarti listening for a steadfast life of devotion.'),
-      findsOneWidget,
-    );
+    expect(find.text('Satsang'), findsWidgets);
     expect(find.text('Morning Satsang'), findsOneWidget);
   });
 
@@ -274,11 +380,7 @@ void main() {
     await tester.tap(find.text('Evening'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-          'Sacred morning, evening, and aarti listening for a steadfast life of devotion.'),
-      findsOneWidget,
-    );
+    expect(find.text('Satsang'), findsWidgets);
     expect(find.text('Evening Satsang'), findsOneWidget);
   });
 
@@ -289,13 +391,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Meditation'), findsWidgets);
-    expect(
-      find.text(
-          'Choose a duration and enter stillness. The sacred closing chant sounds only when meditation ends.'),
-      findsOneWidget,
-    );
     expect(find.text('Om mantra'), findsOneWidget);
-    expect(find.text('417Hz sacred mantra sound'), findsOneWidget);
+    expect(find.text('417Hz sacred mantra sound'), findsNothing);
   });
 
   testWidgets('More tab shows coming soon modules', (tester) async {
@@ -341,23 +438,21 @@ void main() {
     expect(find.text('Ravi Bhatnagar'), findsOneWidget);
   });
 
-  testWidgets('Wisdom tab shows the current sacred quote library',
+  testWidgets('Wisdom tab keeps the daily quote and archive layout',
       (tester) async {
     await pumpSavedHome(tester);
 
     await tester.tap(find.text('Wisdom'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-          'Remember the Guru with a simple heart, and every step becomes worship.'),
-      findsOneWidget,
-    );
-    expect(
-      find.text(
-          'When the day opens and closes in satsang, the heart becomes gentle.'),
-      findsOneWidget,
-    );
+    final dailyQuote = quoteTimelineForDate(fallbackQuotes).daily;
+    if (dailyQuote == null) {
+      expect(find.text('No quote scheduled today'), findsOneWidget);
+    } else {
+      expect(find.text(dailyQuote.text), findsOneWidget);
+    }
+    expect(find.text('Quote of the Day'), findsOneWidget);
+    expect(find.text('Archive'), findsOneWidget);
   });
 
   testWidgets('More tab switches app language to Hindi', (tester) async {
@@ -372,7 +467,7 @@ void main() {
 
     expect(find.text('भाषा'), findsOneWidget);
     expect(find.text('आगामी अनुभाग'), findsOneWidget);
-    expect(find.text('पूजन सामग्री'), findsOneWidget);
+    expect(find.text('सत्संग सामग्री'), findsOneWidget);
     expect(find.text('गृह'), findsOneWidget);
     expect(find.text('Other'), findsNothing);
     expect(find.text('Sacred offerings'), findsNothing);
@@ -427,6 +522,26 @@ void main() {
     expect(find.text('Wisdom'), findsOneWidget);
     expect(find.text('Other'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Bottom navigation labels stay readable in dark mode',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'english',
+      'guruvandan_flutter:theme_mode': 'dark',
+    });
+
+    await tester.pumpWidget(
+        const GuruvandanApp(firebaseReady: false, showOpening: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Enter'));
+    await tester.pumpAndSettle();
+
+    final navigationBar =
+        tester.widget<NavigationBar>(find.byType(NavigationBar));
+    final labelColor = navigationBar.labelTextStyle?.resolve({})?.color;
+    expect(labelColor, const Color(0xFFFFF7EE));
   });
 
   testWidgets('Meditation start asks user to put phone on silent',
