@@ -14,6 +14,7 @@
     <meta property="og:image:width" content="512" />
     <meta property="og:image:height" content="512" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="apple-itunes-app" content="app-id=6807657972, app-argument=guruvandan://home" />
     <meta name="theme-color" content="#7b171d" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="canonical" href="https://guru-vandan.web.app/" />
@@ -79,26 +80,38 @@
         const play = 'https://play.google.com/store/apps/details?id=com.ivar.guruvandan';
         const appStore = 'https://apps.apple.com/app/id6807657972';
 
-        document.querySelector('.android').hidden = ios;
-        document.querySelector('.ios').hidden = android;
-        document.getElementById('continue-web').addEventListener('click', () => {
-          overlay.classList.add('hidden');
-          sessionStorage.setItem('guru-vandan-web-choice', 'web');
-        });
-        document.getElementById('open-app').addEventListener('click', () => {
+        function openAppOrStore() {
+          sessionStorage.setItem('guru-vandan-auto-route-attempted', 'yes');
           if (android) {
             const path = quote ? `quote/${encodeURIComponent(quote)}` : 'home';
             const fallback = encodeURIComponent(play);
             location.href = `intent://${path}#Intent;scheme=guruvandan;package=com.ivar.guruvandan;S.browser_fallback_url=${fallback};end`;
             return;
           }
-          location.href = target;
           if (ios) {
-            const timer = setTimeout(() => location.href = appStore, 1600);
-            document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(timer); }, { once: true });
+            setTimeout(() => {
+              if (!document.hidden) location.replace(appStore);
+            }, 1600);
+            const appFrame = document.createElement('iframe');
+            appFrame.style.display = 'none';
+            appFrame.src = target;
+            document.body.appendChild(appFrame);
+            return;
           }
+          location.href = target;
+        }
+
+        document.querySelector('.android').hidden = ios;
+        document.querySelector('.ios').hidden = android;
+        document.getElementById('continue-web').addEventListener('click', () => {
+          overlay.classList.add('hidden');
+          sessionStorage.setItem('guru-vandan-web-choice', 'web');
         });
+        document.getElementById('open-app').addEventListener('click', openAppOrStore);
         if (sessionStorage.getItem('guru-vandan-web-choice') === 'web') overlay.classList.add('hidden');
+        if ((android || ios) && sessionStorage.getItem('guru-vandan-auto-route-attempted') !== 'yes') {
+          setTimeout(openAppOrStore, 250);
+        }
       })();
     </script>
     <script src="flutter_bootstrap.js" async></script>

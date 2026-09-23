@@ -115,6 +115,7 @@ def landing_page(quote_id: str, quote: str, author: str, scheduled: str):
   <meta name="twitter:title" content="Quote of the Day - Guru Vandan">
   <meta name="twitter:description" content="{safe_quote}">
   <meta name="twitter:image" content="{image_url}">
+  <meta name="apple-itunes-app" content="app-id=6807657972, app-argument={deep_link}">
   <style>
     * {{ box-sizing: border-box; }}
     body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #fbf6ec; color: #2b211f; font-family: Georgia, serif; }}
@@ -156,20 +157,32 @@ def landing_page(quote_id: str, quote: str, author: str, scheduled: str):
       document.querySelector('.android').hidden = ios;
       document.querySelector('.ios').hidden = android;
       const openButton = document.querySelector('#open-app');
-      document.addEventListener('visibilitychange', () => {{
-        if (document.hidden && fallbackTimer) clearTimeout(fallbackTimer);
-      }});
-      let fallbackTimer;
       openButton.addEventListener('click', (event) => {{
         event.preventDefault();
+        openAppOrStore();
+      }});
+      function openAppOrStore() {{
+        sessionStorage.setItem(`guru-vandan-quote-route-${{id}}`, 'yes');
         if (android) {{
           const fallback = encodeURIComponent('{PLAY_STORE}');
           location.href = `intent://quote/${{id}}#Intent;scheme=guruvandan;package=com.ivar.guruvandan;S.browser_fallback_url=${{fallback}};end`;
         }} else {{
-          location.href = `guruvandan://quote/${{id}}`;
-          if (ios) fallbackTimer = setTimeout(() => location.replace('{APP_STORE}'), 1600);
+          if (ios) setTimeout(() => {{
+            if (!document.hidden) location.replace('{APP_STORE}');
+          }}, 1600);
+          if (ios) {{
+            const appFrame = document.createElement('iframe');
+            appFrame.style.display = 'none';
+            appFrame.src = `guruvandan://quote/${{id}}`;
+            document.body.appendChild(appFrame);
+          }} else {{
+            location.href = `guruvandan://quote/${{id}}`;
+          }}
         }}
-      }});
+      }}
+      if ((android || ios) && sessionStorage.getItem(`guru-vandan-quote-route-${{id}}`) !== 'yes') {{
+        setTimeout(openAppOrStore, 250);
+      }}
     }})();
   </script>
 </body>
