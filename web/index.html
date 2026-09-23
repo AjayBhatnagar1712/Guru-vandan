@@ -1,19 +1,106 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <base href="$FLUTTER_BASE_HREF" />
     <meta charset="UTF-8" />
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
-    <meta name="description" content="Guru Vandan daily satsang, meditation, and wisdom" />
+    <meta name="description" content="Guru Vandan brings daily satsang, meditation, aarti and wisdom from Maharshi Mehi Paramhans to the web, Android and iPhone." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Guru Vandan" />
     <meta property="og:title" content="Guru Vandan" />
-    <meta property="og:description" content="Daily satsang, meditation, and wisdom from Maharshi Mehi Paramhans" />
-    <meta property="og:image" content="https://ajaybhatnagar1712.github.io/Guru-vandan/icons/Icon-512.png" />
+    <meta property="og:description" content="Daily satsang, meditation, aarti and wisdom from Maharshi Mehi Paramhans." />
+    <meta property="og:url" content="https://guru-vandan.web.app/" />
+    <meta property="og:image" content="https://guru-vandan.web.app/icons/Icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#7b171d" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="canonical" href="https://guru-vandan.web.app/" />
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" type="image/png" href="icons/Icon-192.png" />
     <title>Guru Vandan</title>
+    <style>
+      :root { color-scheme: light; --wine: #7b171d; --wine-dark: #541014; --gold: #e2bd72; --cream: #fbf6ec; --ink: #2b211f; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--cream); }
+      #app-choice { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 22px; background: radial-gradient(circle at 75% 14%, rgba(226, 189, 114, .32), transparent 28rem), linear-gradient(145deg, #fffaf1 0%, #f1dfc4 100%); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: opacity .28s ease, visibility .28s ease; }
+      #app-choice.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+      .welcome-card { width: min(920px, 100%); overflow: hidden; border: 1px solid rgba(123, 23, 29, .16); border-radius: 30px; background: rgba(255, 253, 249, .96); box-shadow: 0 26px 80px rgba(84, 16, 20, .18); }
+      .welcome-hero { display: grid; grid-template-columns: 1fr 210px; gap: 28px; align-items: center; padding: clamp(28px, 6vw, 58px); background: linear-gradient(135deg, var(--wine-dark), #9c2d31); color: white; }
+      .eyebrow { margin: 0 0 12px; color: var(--gold); font-size: 13px; font-weight: 850; letter-spacing: .16em; }
+      h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(42px, 8vw, 72px); line-height: 1; }
+      .welcome-hero p { max-width: 560px; margin: 18px 0 0; font-size: clamp(17px, 2.4vw, 22px); line-height: 1.5; color: #fff5e8; }
+      .brand-mark { width: 100%; aspect-ratio: 1; border-radius: 28px; border: 5px solid rgba(255,255,255,.82); box-shadow: 0 16px 34px rgba(0,0,0,.2); }
+      .welcome-actions { padding: 26px clamp(24px, 6vw, 58px) 34px; }
+      .welcome-actions h2 { margin: 0 0 8px; font-family: Georgia, serif; color: var(--wine); }
+      .welcome-actions > p { margin: 0 0 20px; color: #6d5d55; line-height: 1.5; }
+      .action-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .choice { display: grid; place-items: center; min-height: 54px; padding: 13px 18px; border: 1px solid var(--wine); border-radius: 15px; background: white; color: var(--wine); font: 800 15px/1.2 inherit; text-align: center; text-decoration: none; cursor: pointer; }
+      .choice.primary { border-color: var(--wine); background: var(--wine); color: white; }
+      .choice.web { border-color: #d4b67b; background: #fff8e9; }
+      .trust { margin-top: 18px; text-align: center; color: #776962; font-size: 13px; }
+      @media (max-width: 720px) { .welcome-hero { grid-template-columns: 1fr 100px; padding: 28px; } .brand-mark { border-radius: 20px; } .action-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 440px) { .welcome-hero { grid-template-columns: 1fr; } .brand-mark { display: none; } }
+    </style>
   </head>
   <body>
+    <section id="app-choice" aria-label="Choose how to use Guru Vandan">
+      <div class="welcome-card">
+        <div class="welcome-hero">
+          <div>
+            <p class="eyebrow">MEDITATION · SATSANG · WISDOM</p>
+            <h1>Guru Vandan</h1>
+            <p>A sacred daily rhythm of satsang, meditation, aarti and wisdom from Maharshi Mehi Paramhans.</p>
+          </div>
+          <img class="brand-mark" src="icons/Icon-512.png" alt="Guru Vandan" />
+        </div>
+        <div class="welcome-actions">
+          <h2>Continue your practice</h2>
+          <p>Open Guru Vandan in the app for the best experience, install it on your device, or continue directly on the website.</p>
+          <div class="action-grid">
+            <button class="choice primary" id="open-app" type="button">Open Guru Vandan app</button>
+            <button class="choice web" id="continue-web" type="button">Continue on website</button>
+            <a class="choice store android" href="https://play.google.com/store/apps/details?id=com.ivar.guruvandan">Get it on Google Play</a>
+            <a class="choice store ios" href="https://apps.apple.com/app/id6807657972">Download on the App Store</a>
+          </div>
+          <div class="trust">Available on Android, iPhone and the web.</div>
+        </div>
+      </div>
+    </section>
+    <script>
+      (() => {
+        const overlay = document.getElementById('app-choice');
+        const ua = navigator.userAgent || '';
+        const android = /Android/i.test(ua);
+        const ios = /iPhone|iPad|iPod/i.test(ua);
+        const quote = new URLSearchParams(location.search).get('quote');
+        const target = quote ? `guruvandan://quote/${encodeURIComponent(quote)}` : 'guruvandan://home';
+        const play = 'https://play.google.com/store/apps/details?id=com.ivar.guruvandan';
+        const appStore = 'https://apps.apple.com/app/id6807657972';
+
+        document.querySelector('.android').hidden = ios;
+        document.querySelector('.ios').hidden = android;
+        document.getElementById('continue-web').addEventListener('click', () => {
+          overlay.classList.add('hidden');
+          sessionStorage.setItem('guru-vandan-web-choice', 'web');
+        });
+        document.getElementById('open-app').addEventListener('click', () => {
+          if (android) {
+            const path = quote ? `quote/${encodeURIComponent(quote)}` : 'home';
+            const fallback = encodeURIComponent(play);
+            location.href = `intent://${path}#Intent;scheme=guruvandan;package=com.ivar.guruvandan;S.browser_fallback_url=${fallback};end`;
+            return;
+          }
+          location.href = target;
+          if (ios) {
+            const timer = setTimeout(() => location.href = appStore, 1600);
+            document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(timer); }, { once: true });
+          }
+        });
+        if (sessionStorage.getItem('guru-vandan-web-choice') === 'web') overlay.classList.add('hidden');
+      })();
+    </script>
     <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>

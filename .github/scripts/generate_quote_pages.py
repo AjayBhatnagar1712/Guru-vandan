@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import html
 import json
+import os
 import re
 import sys
 import textwrap
 import urllib.request
+import urllib.parse
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -15,7 +17,7 @@ DATABASE_URL = (
     "https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app"
     "/quotes.json"
 )
-SITE_ROOT = "https://ajaybhatnagar1712.github.io/Guru-vandan"
+SITE_ROOT = os.environ.get("SITE_ROOT", "https://guru-vandan.web.app").rstrip("/")
 PLAY_STORE = "https://play.google.com/store/apps/details?id=com.ivar.guruvandan"
 APP_STORE = "https://apps.apple.com/app/id6807657972"
 LEGACY_START = date(2026, 9, 13)
@@ -51,13 +53,19 @@ def wrap_for_width(draw: ImageDraw.ImageDraw, value: str, face, width: int):
     return lines
 
 
-def make_card(path: Path, quote: str, author: str, scheduled: str):
+def make_card(path: Path, quote: str, author: str, scheduled: str, logo_path: Path):
     canvas = Image.new("RGB", (1200, 630), "#FBF6EC")
     draw = ImageDraw.Draw(canvas)
     draw.rounded_rectangle((34, 34, 1166, 596), radius=26, fill="#FFFCF7", outline="#D2BDA7", width=3)
     draw.rounded_rectangle((34, 34, 1166, 146), radius=26, fill="#7B171D")
     draw.rectangle((34, 112, 1166, 146), fill="#7B171D")
     draw.text((76, 67), "GURU VANDAN", fill="#F2D193", font=font(39, True))
+    if logo_path.exists():
+        logo = Image.open(logo_path).convert("RGB")
+        logo.thumbnail((94, 94))
+        mask = Image.new("L", logo.size, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, logo.width, logo.height), fill=255)
+        canvas.paste(logo, (1012, 44), mask)
     draw.text((76, 170), "QUOTE OF THE DAY", fill="#C9963E", font=font(24, True))
 
     size = 48 if len(quote) < 115 else 40 if len(quote) < 190 else 34
@@ -84,6 +92,7 @@ def landing_page(quote_id: str, quote: str, author: str, scheduled: str):
     page_url = f"{SITE_ROOT}/quote/{quote_id}/"
     image_url = f"{page_url}card.png"
     deep_link = f"guruvandan://quote/{quote_id}"
+    web_link = f"{SITE_ROOT}/?quote={urllib.parse.quote(quote_id)}"
     js_id = json.dumps(quote_id)
     return f"""<!doctype html>
 <html lang="en">
@@ -115,10 +124,12 @@ def landing_page(quote_id: str, quote: str, author: str, scheduled: str):
     h1 {{ margin: 20px 0 8px; font-size: clamp(30px, 6vw, 52px); line-height: 1.12; letter-spacing: 0; }}
     .author {{ color: #7b171d; font: 800 18px system-ui, sans-serif; }}
     .date {{ color: #675a55; font: 600 14px system-ui, sans-serif; }}
-    nav {{ display: grid; gap: 10px; margin-top: 18px; }}
+    nav {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }}
     a {{ display: block; padding: 15px 18px; border-radius: 8px; text-align: center; text-decoration: none; font: 800 16px system-ui, sans-serif; }}
     .open {{ color: #fff; background: #7b171d; }}
     .store {{ color: #7b171d; border: 1px solid #7b171d; background: #fff; }}
+    .web {{ color: #7b171d; border: 1px solid #d1ad67; background: #fff8e9; }}
+    @media (max-width: 560px) {{ nav {{ grid-template-columns: 1fr; }} }}
   </style>
 </head>
 <body>
@@ -130,7 +141,8 @@ def landing_page(quote_id: str, quote: str, author: str, scheduled: str):
       <p class="date">{safe_date}</p>
     </article>
     <nav>
-      <a class="open" href="{deep_link}">Open in Guru Vandan</a>
+      <a class="open" id="open-app" href="{deep_link}">Open in Guru Vandan app</a>
+      <a class="web" href="{web_link}">Continue on the website</a>
       <a class="store android" href="{PLAY_STORE}">Get it on Google Play</a>
       <a class="store ios" href="{APP_STORE}">Download on the App Store</a>
     </nav>
@@ -143,17 +155,21 @@ def landing_page(quote_id: str, quote: str, author: str, scheduled: str):
       const ios = /iPhone|iPad|iPod/i.test(ua);
       document.querySelector('.android').hidden = ios;
       document.querySelector('.ios').hidden = android;
-      let fallbackTimer;
+      const openButton = document.querySelector('#open-app');
       document.addEventListener('visibilitychange', () => {{
         if (document.hidden && fallbackTimer) clearTimeout(fallbackTimer);
       }});
-      if (android) {{
-        const fallback = encodeURIComponent('{PLAY_STORE}');
-        location.replace(`intent://quote/${{id}}#Intent;scheme=guruvandan;package=com.ivar.guruvandan;S.browser_fallback_url=${{fallback}};end`);
-      }} else if (ios) {{
-        location.href = `guruvandan://quote/${{id}}`;
-        fallbackTimer = setTimeout(() => location.replace('{APP_STORE}'), 1600);
-      }}
+      let fallbackTimer;
+      openButton.addEventListener('click', (event) => {{
+        event.preventDefault();
+        if (android) {{
+          const fallback = encodeURIComponent('{PLAY_STORE}');
+          location.href = `intent://quote/${{id}}#Intent;scheme=guruvandan;package=com.ivar.guruvandan;S.browser_fallback_url=${{fallback}};end`;
+        }} else {{
+          location.href = `guruvandan://quote/${{id}}`;
+          if (ios) fallbackTimer = setTimeout(() => location.replace('{APP_STORE}'), 1600);
+        }}
+      }});
     }})();
   </script>
 </body>
@@ -191,7 +207,13 @@ def main():
 
         page_dir = output / "quote" / quote_id
         page_dir.mkdir(parents=True, exist_ok=True)
-        make_card(page_dir / "card.png", quote, author, scheduled)
+        make_card(
+            page_dir / "card.png",
+            quote,
+            author,
+            scheduled,
+            output / "icons" / "Icon-512.png",
+        )
         (page_dir / "index.html").write_text(
             landing_page(quote_id, quote, author, scheduled),
             encoding="utf-8",

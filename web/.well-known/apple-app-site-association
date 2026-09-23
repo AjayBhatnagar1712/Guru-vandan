@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "DLJNFQ8DW6.com.ivar.guruvandan"
+        ],
+        "components": [
+          {
+            "/": "/quote/*",
+            "comment": "Open shared Guru Vandan quotes in the installed iOS app."
+          }
+        ]
+      }
+    ]
+  }
+}

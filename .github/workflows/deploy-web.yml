@@ -43,6 +43,8 @@ jobs:
         run: flutter build web --release --base-href /Guru-vandan/ --no-wasm-dry-run
 
       - name: Generate quote share cards
+        env:
+          SITE_ROOT: https://ajaybhatnagar1712.github.io/Guru-vandan
         run: |
           python -m pip install --disable-pip-version-check pillow
           python .github/scripts/generate_quote_pages.py build/web

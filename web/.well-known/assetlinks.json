@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ivar.guruvandan",
+      "sha256_cert_fingerprints": [
+        "BF:BD:5B:58:2A:18:91:B7:11:35:25:CE:23:3C:1E:0E:8A:B8:C6:DF:C0:CA:43:E0:B1:4D:BB:79:F9:EC:23:D0"
+      ]
+    }
+  }
+]

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:audio_session/audio_session.dart';
 import 'package:app_links/app_links.dart';
@@ -22,7 +23,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const allowedAdminEmail = 'guruvandan11@trustkeyper.com';
-const appShareLink = 'https://ajaybhatnagar1712.github.io/Guru-vandan';
+const appShareLink = String.fromEnvironment(
+  'GURU_VANDAN_WEB_URL',
+  defaultValue: 'https://guru-vandan.web.app',
+);
 const androidStoreLink =
     'https://play.google.com/store/apps/details?id=com.ivar.guruvandan';
 const iosStoreLink = 'https://apps.apple.com/app/id6807657972';
@@ -1441,7 +1445,7 @@ String wisdomQuoteShareText(BuildContext context, WisdomQuote quote) {
     'A sacred thought from Guru Vandan',
     'गुरु वंदन का पावन वचन',
   );
-  return '$heading\n\n${wisdomQuoteShareLink(quote)}';
+  return '$heading\n\n“${quote.text}”\n\n— ${quote.author}\n\n${wisdomQuoteShareLink(quote)}';
 }
 
 String wisdomQuoteShareLink(WisdomQuote quote) =>
@@ -1467,31 +1471,193 @@ Future<bool> shareWisdomQuote(BuildContext context, WisdomQuote quote) async {
   final origin = renderBox is RenderBox
       ? renderBox.localToGlobal(Offset.zero) & renderBox.size
       : null;
+  final shareText = wisdomQuoteShareText(context, quote);
+  final unavailableText = appText(
+    context,
+    'Sharing is not available on this device right now.',
+    'इस उपकरण पर अभी साझा करने की सुविधा उपलब्ध नहीं है।',
+  );
 
   try {
+    final cardBytes = await _buildWisdomShareCard(quote);
     await SharePlus.instance.share(
       ShareParams(
-        text: wisdomQuoteShareText(context, quote),
+        text: shareText,
         subject: 'Guru Vandan',
+        files: [
+          XFile.fromData(
+            cardBytes,
+            mimeType: 'image/png',
+            name: 'guru-vandan-${quote.id}.png',
+          ),
+        ],
         sharePositionOrigin: origin,
       ),
     );
     return true;
   } catch (_) {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: shareText,
+          subject: 'Guru Vandan',
+          sharePositionOrigin: origin,
+        ),
+      );
+      return true;
+    } catch (_) {}
     if (!context.mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          appText(
-            context,
-            'Sharing is not available on this device right now.',
-            'इस उपकरण पर अभी साझा करने की सुविधा उपलब्ध नहीं है।',
-          ),
+          unavailableText,
         ),
       ),
     );
     return false;
   }
+}
+
+Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
+  const width = 1200.0;
+  const height = 630.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final bounds = const Rect.fromLTWH(0, 0, width, height);
+  final background = Paint()
+    ..shader = ui.Gradient.linear(
+      const Offset(0, 0),
+      const Offset(width, height),
+      const [Color(0xFFFFFAF1), Color(0xFFF4E2C4)],
+    );
+  canvas.drawRect(bounds, background);
+
+  final panel = RRect.fromRectAndRadius(
+    const Rect.fromLTWH(34, 34, 1132, 562),
+    const Radius.circular(30),
+  );
+  canvas.drawRRect(panel, Paint()..color = const Color(0xFFFFFDF9));
+  canvas.drawRRect(
+    panel,
+    Paint()
+      ..color = const Color(0xFFD9C2AA)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3,
+  );
+
+  final header = RRect.fromRectAndCorners(
+    const Rect.fromLTWH(34, 34, 1132, 142),
+    topLeft: const Radius.circular(30),
+    topRight: const Radius.circular(30),
+  );
+  canvas.drawRRect(header, Paint()..color = const Color(0xFF7B171D));
+
+  final logoData = await rootBundle.load('assets/images/app_icon.png');
+  final codec = await ui.instantiateImageCodec(
+    logoData.buffer.asUint8List(),
+    targetWidth: 118,
+    targetHeight: 118,
+  );
+  final logoFrame = await codec.getNextFrame();
+  final logoRect = RRect.fromRectAndRadius(
+    const Rect.fromLTWH(1000, 46, 108, 108),
+    const Radius.circular(54),
+  );
+  canvas.save();
+  canvas.clipRRect(logoRect);
+  paintImage(
+    canvas: canvas,
+    rect: logoRect.outerRect,
+    image: logoFrame.image,
+    fit: BoxFit.cover,
+  );
+  canvas.restore();
+
+  void drawText(
+    String value,
+    Rect area,
+    TextStyle textStyle, {
+    int? maxLines,
+    TextAlign align = TextAlign.left,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: textStyle),
+      textDirection: ui.TextDirection.ltr,
+      textAlign: align,
+      maxLines: maxLines,
+      ellipsis: maxLines == null ? null : '…',
+    )..layout(maxWidth: area.width);
+    painter.paint(canvas, area.topLeft);
+  }
+
+  drawText(
+    'GURU VANDAN',
+    const Rect.fromLTWH(78, 68, 850, 60),
+    const TextStyle(
+      color: Color(0xFFF2D193),
+      fontSize: 42,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 2.2,
+    ),
+  );
+  drawText(
+    'QUOTE OF THE DAY',
+    const Rect.fromLTWH(78, 188, 900, 42),
+    const TextStyle(
+      color: Color(0xFFC28C2C),
+      fontSize: 25,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1.3,
+    ),
+  );
+
+  final quoteSize = quote.text.length < 110
+      ? 50.0
+      : quote.text.length < 190
+          ? 41.0
+          : 34.0;
+  drawText(
+    '“${quote.text}”',
+    const Rect.fromLTWH(78, 246, 1044, 230),
+    TextStyle(
+      color: const Color(0xFF2B211F),
+      fontSize: quoteSize,
+      fontWeight: FontWeight.w700,
+      height: 1.16,
+    ),
+    maxLines: 5,
+  );
+  drawText(
+    quote.author,
+    const Rect.fromLTWH(78, 520, 760, 44),
+    const TextStyle(
+      color: Color(0xFF7B171D),
+      fontSize: 28,
+      fontWeight: FontWeight.w800,
+    ),
+    maxLines: 1,
+  );
+  drawText(
+    'guruvandan',
+    const Rect.fromLTWH(860, 524, 260, 36),
+    const TextStyle(
+      color: Color(0xFF6D5D55),
+      fontSize: 22,
+      fontWeight: FontWeight.w600,
+    ),
+    maxLines: 1,
+    align: TextAlign.right,
+  );
+
+  final image = await recorder.endRecording().toImage(
+        width.toInt(),
+        height.toInt(),
+      );
+  final png = await image.toByteData(format: ui.ImageByteFormat.png);
+  logoFrame.image.dispose();
+  image.dispose();
+  if (png == null) throw StateError('Could not create the quote share card.');
+  return png.buffer.asUint8List();
 }
 
 class FirebaseContentService {

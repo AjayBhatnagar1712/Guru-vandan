@@ -117,12 +117,32 @@ void main() {
         DateTime(2026, 9, 16));
   });
 
-  test('Quote links identify the exact quote on web and in the app', () {
+  testWidgets('Quote links identify the exact quote on web and in the app',
+      (tester) async {
+    late BuildContext context;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LanguageScope(
+          language: AppLanguage.english,
+          onChanged: (_) {},
+          child: Builder(
+            builder: (value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
     const quote = WisdomQuote(id: 'firebase-quote-1', text: 'A quote');
     expect(
       wisdomQuoteShareLink(quote),
-      'https://ajaybhatnagar1712.github.io/Guru-vandan/quote/firebase-quote-1/',
+      'https://guru-vandan.web.app/quote/firebase-quote-1/',
     );
+    final shareText = wisdomQuoteShareText(context, quote);
+    expect(shareText, contains(quote.text));
+    expect(shareText, contains(quote.author));
+    expect(shareText, contains(wisdomQuoteShareLink(quote)));
     expect(
       quoteIdFromUri(Uri.parse('guruvandan://quote/firebase-quote-1')),
       'firebase-quote-1',

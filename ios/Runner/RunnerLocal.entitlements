@@ -6,5 +6,11 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:guru-vandan.web.app</string>
+		<string>applinks:guruvandan.com</string>
+		<string>applinks:www.guruvandan.com</string>
+	</array>
 </dict>
 </plist>
