@@ -7,8 +7,8 @@
         ],
         "components": [
           {
-            "/": "/*",
-            "comment": "Open the Guru Vandan website and shared quotes in the installed iOS app."
+            "/": "/quote/*",
+            "comment": "Open shared Guru Vandan quote links in the installed iOS app."
           }
         ]
       }
