@@ -3896,6 +3896,21 @@ class _DevoteeShellState extends State<DevoteeShell>
   }
 
   Future<void> _setMantraLoopEnabled(bool enabled) async {
+    if (meditationChantPhase != null) return;
+
+    if (!meditationSessionStarted) {
+      if (playbackKind == BackgroundPlaybackKind.mantra) {
+        await _stopBackgroundAudio();
+      }
+      if (!mounted) return;
+      setState(() {
+        mantraLoopEnabled = enabled;
+        mantraLoopPlaying = false;
+        meditationUsesMantra = false;
+      });
+      return;
+    }
+
     if (enabled) {
       await _playMantraLoop();
     } else {
@@ -3905,11 +3920,6 @@ class _DevoteeShellState extends State<DevoteeShell>
 
   Future<void> _playMantraLoop() async {
     if (meditationChantPhase != null) return;
-
-    final confirmed = await _confirmPhoneSilent(
-        'the Om mantra can play without interruption');
-    if (!confirmed) return;
-    if (!mounted) return;
 
     try {
       if (meditationSessionStarted && remainingSeconds > 0) {
@@ -3925,36 +3935,12 @@ class _DevoteeShellState extends State<DevoteeShell>
         if (shouldKeepPlaying) _playPreparedBackgroundAudio();
         return;
       }
-
-      final mediaItem = _backgroundMediaItem(
-        id: 'om-mantra-417hz',
-        title: appText(context, 'Om Mantra', 'ॐ मंत्र'),
-        description: appText(
-          context,
-          '417Hz mantra soundscape',
-          '417Hz मंत्र-नाद',
-        ),
-      );
-      await _prepareBackgroundAudio(
-        source: _assetAudioSource(
-          'audio/om_mantra_417hz_loop.mp3',
-          mediaItem,
-        ),
-        kind: BackgroundPlaybackKind.mantra,
-        loop: true,
-        volume: 1,
-      );
-
       if (!mounted) return;
       setState(() {
         mantraLoopEnabled = true;
-        mantraLoopPlaying = true;
+        mantraLoopPlaying = false;
         meditationUsesMantra = false;
-        activeTrackId = null;
-        activeTrackTask = null;
-        audioPosition = Duration.zero;
       });
-      _playPreparedBackgroundAudio();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -9067,12 +9053,22 @@ class _AboutHomeSection extends StatelessWidget {
             'MAHARSHI MEHI PARAMHANS',
             'महर्षि मेंही परमहंस',
           ),
+          body: appText(
+            context,
+            'Maharshi Mehi Paramhans was a revered saint of Santmat. His teachings guide seekers toward inner meditation, satsang, compassion, and a life rooted in truth.',
+            'महर्षि मेंही परमहंस संतमत के पूज्य संत थे। उनकी शिक्षा साधकों को अंतर्ध्यान, सत्संग, करुणा और सत्यमय जीवन की ओर प्रेरित करती है।',
+          ),
           accentColor: AppColors.maroon,
           icon: Icons.auto_awesome_rounded,
         ),
         const SizedBox(height: 14),
         _AboutAccordionCard(
-          title: appText(context, 'GURUVANDAN', 'गुरुवंदन परिचय'),
+          title: appText(context, 'GURUVANDAN PARICHAY', 'गुरुवंदन परिचय'),
+          body: appText(
+            context,
+            'Guruvandan supports a simple daily spiritual practice through satsang, meditation, aarti, and wisdom so devotees can continue their sadhana with regularity.',
+            'गुरुवंदन सत्संग, ध्यान, आरती और ज्ञान के माध्यम से सरल दैनिक साधना में सहायक है, जिससे साधक नियमितता से अपनी साधना जारी रख सकें।',
+          ),
           accentColor: AppColors.gold,
           icon: Icons.volunteer_activism_rounded,
         ),
@@ -9084,11 +9080,13 @@ class _AboutHomeSection extends StatelessWidget {
 class _AboutAccordionCard extends StatelessWidget {
   const _AboutAccordionCard({
     required this.title,
+    required this.body,
     required this.accentColor,
     required this.icon,
   });
 
   final String title;
+  final String body;
   final Color accentColor;
   final IconData icon;
 
@@ -9097,7 +9095,6 @@ class _AboutAccordionCard extends StatelessWidget {
     final language = LanguageScope.of(context).language;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(22, 16, 18, 16),
       decoration: _cardDecoration(
         color: AppColors.offWhite,
         borderColor: AppColors.border,
@@ -9110,29 +9107,48 @@ class _AboutAccordionCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.22),
-              ),
+      child: ExpansionTile(
+        key: Key('about-$title'),
+        initiallyExpanded: false,
+        maintainState: true,
+        tilePadding: const EdgeInsets.fromLTRB(22, 8, 18, 8),
+        childrenPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
+        iconColor: accentColor,
+        collapsedIconColor: accentColor,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: accentColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: accentColor.withValues(alpha: 0.22),
             ),
-            child: Icon(icon, color: accentColor, size: 23),
           ),
-          const SizedBox(width: 14),
-          Expanded(
+          child: Icon(icon, color: accentColor, size: 23),
+        ),
+        title: Text(
+          title,
+          style: _bodyStyle(
+            language,
+            color: accentColor,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        children: [
+          Align(
+            alignment: AlignmentDirectional.centerStart,
             child: Text(
-              title,
+              body,
               style: _bodyStyle(
                 language,
-                color: accentColor,
+                color: AppColors.ink,
                 fontSize: 15,
-                fontWeight: FontWeight.w900,
+                height: 1.55,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),

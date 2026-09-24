@@ -280,6 +280,28 @@ void main() {
     expect(practiceTop.dy, lessThan(streakTop.dy));
   });
 
+  testWidgets('Home introductions expand only when tapped', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpSavedHome(tester);
+
+    const heading = 'MAHARSHI MEHI PARAMHANS';
+    const introduction =
+        'Maharshi Mehi Paramhans was a revered saint of Santmat. His teachings guide seekers toward inner meditation, satsang, compassion, and a life rooted in truth.';
+
+    await tester.ensureVisible(find.text(heading));
+    await tester.pumpAndSettle();
+    expect(find.text(introduction), findsNothing);
+
+    await tester.tap(find.text(heading));
+    await tester.pumpAndSettle();
+    expect(find.text(introduction), findsOneWidget);
+
+    await tester.tap(find.text(heading));
+    await tester.pumpAndSettle();
+    expect(find.text(introduction), findsNothing);
+  });
+
   testWidgets('Admin route opens the dedicated email and password entrance',
       (tester) async {
     SharedPreferences.setMockInitialValues({
@@ -581,5 +603,27 @@ void main() {
       find.textContaining('Please silence your phone'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Selecting Om waits for the meditation timer', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpSavedHome(tester);
+    await tester.tap(find.text('Meditation').first);
+    await tester.pumpAndSettle();
+
+    final omSwitch = find.byType(Switch);
+    expect(omSwitch, findsOneWidget);
+    await tester.tap(omSwitch);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Switch>(omSwitch).value, isTrue);
+    expect(find.text('Ready for stillness'), findsOneWidget);
+    expect(find.text('Prepare for sacred listening'), findsNothing);
+
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+    expect(find.text('Prepare for sacred listening'), findsOneWidget);
   });
 }
