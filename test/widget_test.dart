@@ -292,6 +292,53 @@ void main() {
     expect(formatActivityDuration(3900), '1h 5m');
   });
 
+  test('Remembered login survives a temporary native restore failure', () {
+    expect(
+      shouldUseRememberedAuthSession(
+        startupComplete: true,
+        authStreamReady: true,
+        hasAuthenticatedUser: false,
+        hasRememberedSession: true,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldUseRememberedAuthSession(
+        startupComplete: true,
+        authStreamReady: true,
+        hasAuthenticatedUser: false,
+        hasRememberedSession: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldUseRememberedAuthSession(
+        startupComplete: false,
+        authStreamReady: true,
+        hasAuthenticatedUser: false,
+        hasRememberedSession: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('Existing account profile migrates to remembered login', () {
+    expect(
+      legacyAuthenticatedUidFromPreferenceKeys({
+        'guruvandan_flutter:language',
+        'guruvandan_flutter:name:firebase-user-123',
+      }),
+      'firebase-user-123',
+    );
+    expect(
+      legacyAuthenticatedUidFromPreferenceKeys({
+        'guruvandan_flutter:name',
+        'guruvandan_flutter:routine',
+      }),
+      isNull,
+    );
+  });
+
   testWidgets('Guru Vandan home renders with first name', (tester) async {
     SharedPreferences.setMockInitialValues({
       'guruvandan_flutter:name': 'Ajay Bhatnagar',

@@ -36,6 +36,8 @@ const firebaseDatabaseUrl =
     'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app';
 const _googleServerClientId =
     '540841544767-tlaebghbususiucprk4g2i2t1n2m5fmk.apps.googleusercontent.com';
+const _rememberedAuthUidKey = 'guruvandan_flutter:authenticated_uid';
+const _authenticatedProfileKeyPrefix = 'guruvandan_flutter:name:';
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -330,6 +332,27 @@ enum BackgroundPlaybackKind { none, satsang, mantra, meditation, closingChant }
 Brightness _activeAppBrightness = Brightness.light;
 
 bool get _appIsDark => _activeAppBrightness == Brightness.dark;
+
+bool shouldUseRememberedAuthSession({
+  required bool startupComplete,
+  required bool authStreamReady,
+  required bool hasAuthenticatedUser,
+  required bool hasRememberedSession,
+}) {
+  return startupComplete &&
+      authStreamReady &&
+      !hasAuthenticatedUser &&
+      hasRememberedSession;
+}
+
+String? legacyAuthenticatedUidFromPreferenceKeys(Iterable<String> keys) {
+  for (final key in keys) {
+    if (!key.startsWith(_authenticatedProfileKeyPrefix)) continue;
+    final uid = key.substring(_authenticatedProfileKeyPrefix.length).trim();
+    if (uid.isNotEmpty) return uid;
+  }
+  return null;
+}
 
 Color _surfaceColor([Color light = AppColors.surface]) {
   if (!_appIsDark) return light;
@@ -2302,23 +2325,57 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   late final Future<String?> startup = _prepareAuthStartup();
+  bool keepRememberedSession = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        widget.firebaseReady &&
+        keepRememberedSession &&
+        FirebaseAuth.instance.currentUser == null &&
+        !kIsWeb) {
+      unawaited(_restoreNativeGoogleSession());
+    }
+  }
 
   Future<String?> _prepareAuthStartup() async {
     final language = LanguageScope.of(context).language;
     if (!widget.firebaseReady) return null;
-
-    if (!kIsWeb) {
-      await _restoreNativeGoogleSession();
-      return null;
-    }
-
     final googleCouldNotComplete = appText(
       context,
       'Google sign-in could not be completed. Please try again.',
       'Google द्वारा प्रवेश पूर्ण नहीं हो सका। कृपया पुनः प्रयास करें।',
     );
+
+    final prefs = await SharedPreferences.getInstance();
+    var rememberedUid = (prefs.getString(_rememberedAuthUidKey) ?? '').trim();
+    if (rememberedUid.isEmpty) {
+      rememberedUid =
+          legacyAuthenticatedUidFromPreferenceKeys(prefs.getKeys()) ?? '';
+      if (rememberedUid.isNotEmpty) {
+        await prefs.setString(_rememberedAuthUidKey, rememberedUid);
+      }
+    }
+    keepRememberedSession = rememberedUid.isNotEmpty;
+
+    if (!kIsWeb) {
+      await _restoreNativeGoogleSession();
+      return null;
+    }
 
     try {
       await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
@@ -2364,11 +2421,23 @@ class _AuthGateState extends State<AuthGate> {
             }
 
             if (user == null) {
+              if (shouldUseRememberedAuthSession(
+                startupComplete:
+                    snapshot.connectionState == ConnectionState.done,
+                authStreamReady:
+                    authSnapshot.connectionState != ConnectionState.waiting,
+                hasAuthenticatedUser: false,
+                hasRememberedSession: keepRememberedSession,
+              )) {
+                return const DevoteeShell(firebaseReady: false);
+              }
               return _SignInScreen(
                 initialStatus: startupError,
                 initialStatusIsError: startupError != null,
               );
             }
+
+            unawaited(_rememberAuthenticatedUser(user));
 
             return DevoteeShell(
               key: ValueKey('devotee-shell-${user.uid}'),
@@ -2454,9 +2523,11 @@ class _SignInScreenState extends State<_SignInScreen> {
     });
 
     try {
-      await _signInToFirebaseWithGoogle(
+      final credential = await _signInToFirebaseWithGoogle(
         confirmAccountLink: _confirmAccountLink,
       );
+      final user = credential.user;
+      if (user != null) await _rememberAuthenticatedUser(user);
       widget.onSignedIn?.call();
     } on _AuthFlowCanceled {
       // The user intentionally closed a provider or account-linking flow.
@@ -2499,9 +2570,11 @@ class _SignInScreenState extends State<_SignInScreen> {
     });
 
     try {
-      await _signInToFirebaseWithApple(
+      final credential = await _signInToFirebaseWithApple(
         confirmAccountLink: _confirmAccountLink,
       );
+      final user = credential.user;
+      if (user != null) await _rememberAuthenticatedUser(user);
       widget.onSignedIn?.call();
     } on _AuthFlowCanceled {
       // The user intentionally closed a provider or account-linking flow.
@@ -2614,7 +2687,10 @@ class _SignInScreenState extends State<_SignInScreen> {
         await FirebaseAuth.instance.verifyPhoneNumber(
           phoneNumber: phoneNumber,
           verificationCompleted: (credential) async {
-            await FirebaseAuth.instance.signInWithCredential(credential);
+            final result =
+                await FirebaseAuth.instance.signInWithCredential(credential);
+            final user = result.user;
+            if (user != null) await _rememberAuthenticatedUser(user);
             widget.onSignedIn?.call();
           },
           verificationFailed: (error) {
@@ -2694,7 +2770,9 @@ class _SignInScreenState extends State<_SignInScreen> {
           ));
           return;
         }
-        await result.confirm(code);
+        final credential = await result.confirm(code);
+        final user = credential.user;
+        if (user != null) await _rememberAuthenticatedUser(user);
       } else {
         final id = verificationId;
         if (id == null) {
@@ -2709,7 +2787,10 @@ class _SignInScreenState extends State<_SignInScreen> {
           verificationId: id,
           smsCode: code,
         );
-        await FirebaseAuth.instance.signInWithCredential(credential);
+        final result =
+            await FirebaseAuth.instance.signInWithCredential(credential);
+        final user = result.user;
+        if (user != null) await _rememberAuthenticatedUser(user);
       }
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
@@ -3356,7 +3437,10 @@ class _DevoteeShellState extends State<DevoteeShell>
     if (savedProfile != null) {
       devoteeProfile = savedProfile;
       await prefs.setString(_nameStorageKey, jsonEncode(savedProfile.toJson()));
-      if (widget.user != null) unawaited(_saveCloudProfile(savedProfile));
+      if (widget.user != null) {
+        await prefs.setString(nameKey, jsonEncode(savedProfile.toJson()));
+        unawaited(_saveCloudProfile(savedProfile));
+      }
     } else {
       needsProfileName = true;
     }
@@ -3393,7 +3477,10 @@ class _DevoteeShellState extends State<DevoteeShell>
   Future<void> _saveProfile(DevoteeProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_nameStorageKey, jsonEncode(profile.toJson()));
-    if (widget.user != null) unawaited(_saveCloudProfile(profile));
+    if (widget.user != null) {
+      await prefs.setString(nameKey, jsonEncode(profile.toJson()));
+      unawaited(_saveCloudProfile(profile));
+    }
     if (mounted) {
       setState(() {
         devoteeProfile = profile;
@@ -3632,6 +3719,7 @@ class _DevoteeShellState extends State<DevoteeShell>
     await _finishSatsangActivity();
     await _stopBackgroundAudio();
     try {
+      await _forgetAuthenticatedUser();
       if (Firebase.apps.isNotEmpty) {
         await _signOutFromGoogleProvider();
         await FirebaseAuth.instance.signOut();
@@ -3683,6 +3771,7 @@ class _DevoteeShellState extends State<DevoteeShell>
       await prefs.remove(nameKey);
       await prefs.remove(routineKey);
       await prefs.remove(likedQuotesKey);
+      await prefs.remove(_rememberedAuthUidKey);
 
       await user.delete();
       await _signOutFromGoogleProvider();
@@ -7819,6 +7908,7 @@ class _AdminConsoleState extends State<AdminConsole> {
         actions: [
           IconButton(
             onPressed: () async {
+              await _forgetAuthenticatedUser();
               await _signOutFromGoogleProvider();
               await FirebaseAuth.instance.signOut();
             },
@@ -9821,25 +9911,84 @@ Future<void> _ensureGoogleSignInReady() {
   );
 }
 
+Future<void> _rememberAuthenticatedUser(User user) async {
+  final uid = user.uid.trim();
+  if (uid.isEmpty) return;
+  final prefs = await SharedPreferences.getInstance();
+  if (prefs.getString(_rememberedAuthUidKey) != uid) {
+    await prefs.setString(_rememberedAuthUidKey, uid);
+  }
+}
+
+Future<void> _forgetAuthenticatedUser() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_rememberedAuthUidKey);
+}
+
+Future<GoogleSignInAccount?> _attemptNativeGoogleSessionRestore() async {
+  final completer = Completer<GoogleSignInAccount?>();
+  late final StreamSubscription<GoogleSignInAuthenticationEvent> subscription;
+  subscription = GoogleSignIn.instance.authenticationEvents.listen(
+    (event) {
+      if (event is GoogleSignInAuthenticationEventSignIn &&
+          !completer.isCompleted) {
+        completer.complete(event.user);
+      } else if (event is GoogleSignInAuthenticationEventSignOut &&
+          !completer.isCompleted) {
+        completer.complete(null);
+      }
+    },
+    onError: (_) {
+      if (!completer.isCompleted) completer.complete(null);
+    },
+  );
+
+  try {
+    final attempt = GoogleSignIn.instance.attemptLightweightAuthentication();
+    if (attempt != null) {
+      final account = await attempt.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
+      if (account != null) return account;
+      if (completer.isCompleted) return completer.future;
+      return await completer.future.timeout(
+        const Duration(milliseconds: 700),
+        onTimeout: () => null,
+      );
+    }
+
+    return await completer.future.timeout(
+      const Duration(seconds: 4),
+      onTimeout: () => null,
+    );
+  } finally {
+    await subscription.cancel();
+  }
+}
+
 Future<User?> _restoreNativeGoogleSession() async {
   final existingUser = FirebaseAuth.instance.currentUser;
   if (kIsWeb || existingUser != null) return existingUser;
 
   try {
     await _ensureGoogleSignInReady();
-    final lightweightAttempt =
-        GoogleSignIn.instance.attemptLightweightAuthentication();
-    if (lightweightAttempt == null) return null;
-
-    final account =
-        await lightweightAttempt.timeout(const Duration(seconds: 8));
-    final idToken = account?.authentication.idToken;
-    if (idToken == null || idToken.isEmpty) return null;
-
-    final credential = await FirebaseAuth.instance.signInWithCredential(
-      GoogleAuthProvider.credential(idToken: idToken),
-    );
-    return credential.user;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final account = await _attemptNativeGoogleSessionRestore();
+      final idToken = account?.authentication.idToken;
+      if (idToken != null && idToken.isNotEmpty) {
+        final credential = await FirebaseAuth.instance.signInWithCredential(
+          GoogleAuthProvider.credential(idToken: idToken),
+        );
+        final user = credential.user;
+        if (user != null) await _rememberAuthenticatedUser(user);
+        return user;
+      }
+      if (attempt == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 650));
+      }
+    }
+    return FirebaseAuth.instance.currentUser;
   } catch (_) {
     return FirebaseAuth.instance.currentUser;
   }
@@ -9916,6 +10065,7 @@ Future<UserCredential> _linkCredentialToVerifiedAccount({
   if (!user.emailVerified ||
       !normalizedExpected.contains('@') ||
       verifiedEmail != normalizedExpected) {
+    await _forgetAuthenticatedUser();
     await FirebaseAuth.instance.signOut();
     throw const _AuthIntegrityException(
       'The verified account uses a different email address. For your security, no accounts were linked.',
@@ -9926,6 +10076,7 @@ Future<UserCredential> _linkCredentialToVerifiedAccount({
     return await user.linkWithCredential(pendingCredential);
   } on FirebaseAuthException catch (error) {
     if (error.code == 'provider-already-linked') return verifiedAccount;
+    await _forgetAuthenticatedUser();
     await FirebaseAuth.instance.signOut();
     if (error.code == 'credential-already-in-use') {
       throw const _AuthIntegrityException(
@@ -9934,6 +10085,7 @@ Future<UserCredential> _linkCredentialToVerifiedAccount({
     }
     rethrow;
   } catch (_) {
+    await _forgetAuthenticatedUser();
     await FirebaseAuth.instance.signOut();
     rethrow;
   }
