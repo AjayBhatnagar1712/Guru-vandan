@@ -30,7 +30,7 @@ const appShareLink = String.fromEnvironment(
 const androidStoreLink =
     'https://play.google.com/store/apps/details?id=com.ivar.guruvandan';
 const iosStoreLink = 'https://apps.apple.com/app/id6807657972';
-const _legacyQuoteScheduleStart = '2026-09-13';
+const _legacyQuoteScheduleStart = '2026-09-24';
 final ValueNotifier<String?> incomingQuoteId = ValueNotifier<String?>(null);
 const firebaseDatabaseUrl =
     'https://guru-vandan-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -1140,12 +1140,34 @@ List<WisdomQuote> quotesWithSchedule(List<WisdomQuote> quotes) {
   final ordered = [...quotes]
     ..sort((a, b) => (b.createdAt ?? 0).compareTo(a.createdAt ?? 0));
   final legacyStart = DateTime.parse(_legacyQuoteScheduleStart);
-  var legacyIndex = 0;
+  final reservedDays = ordered
+      .map(quoteScheduledDay)
+      .whereType<DateTime>()
+      .where((day) => !day.isBefore(legacyStart))
+      .map(quoteDateKey)
+      .toSet();
+  final assignedDays = <String>{};
+  var nextLegacyDay = legacyStart;
 
   return ordered.map((quote) {
-    if (quoteScheduledDay(quote) != null) return quote;
-    final scheduled = legacyStart.add(Duration(days: legacyIndex));
-    legacyIndex++;
+    final existingDay = quoteScheduledDay(quote);
+    final existingKey = existingDay == null ? null : quoteDateKey(existingDay);
+    if (existingDay != null &&
+        !existingDay.isBefore(legacyStart) &&
+        existingKey != null &&
+        assignedDays.add(existingKey)) {
+      return quote;
+    }
+
+    var scheduledKey = quoteDateKey(nextLegacyDay);
+    while (reservedDays.contains(scheduledKey) ||
+        assignedDays.contains(scheduledKey)) {
+      nextLegacyDay = nextLegacyDay.add(const Duration(days: 1));
+      scheduledKey = quoteDateKey(nextLegacyDay);
+    }
+    final scheduled = nextLegacyDay;
+    assignedDays.add(scheduledKey);
+    nextLegacyDay = nextLegacyDay.add(const Duration(days: 1));
     return quote.copyWith(scheduledDate: quoteDateKey(scheduled));
   }).toList(growable: false);
 }
@@ -1868,7 +1890,13 @@ class FirebaseContentService {
 
   Future<List<WisdomQuote>> _publicQuotesFromRest() async {
     final uri = Uri.parse('$firebaseDatabaseUrl/quotes.json');
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    final response = await http.get(
+      uri,
+      headers: const {
+        'Cache-Control': 'no-cache, no-store, max-age=0',
+        'Pragma': 'no-cache',
+      },
+    ).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return const [];
 
     final decoded = jsonDecode(response.body);
@@ -1879,14 +1907,29 @@ class FirebaseContentService {
     );
   }
 
-  Stream<List<WisdomQuote>> quotes() async* {
-    final cached = _cachedQuotes;
-    if (cached != null) {
-      yield cached;
-    } else {
-      yield await _loadPublicQuotes();
-    }
-    yield* _quoteUpdates.stream;
+  Stream<List<WisdomQuote>> quotes() {
+    late final StreamController<List<WisdomQuote>> controller;
+    StreamSubscription<List<WisdomQuote>>? updates;
+    controller = StreamController<List<WisdomQuote>>(
+      onListen: () {
+        updates = _quoteUpdates.stream.listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        unawaited(() async {
+          try {
+            final cached = _cachedQuotes;
+            final initial = cached ?? await _loadPublicQuotes();
+            if (!controller.isClosed) controller.add(initial);
+          } catch (error, stackTrace) {
+            if (!controller.isClosed) controller.addError(error, stackTrace);
+          }
+        }());
+      },
+      onCancel: () => updates?.cancel(),
+    );
+    return controller.stream;
   }
 
   Future<void> refreshQuotes() async {
@@ -1894,21 +1937,27 @@ class FirebaseContentService {
     if (!_quoteUpdates.isClosed) _quoteUpdates.add(refreshed);
   }
 
-  Future<List<WisdomQuote>> _loadPublicQuotes({bool force = false}) {
+  Future<List<WisdomQuote>> _loadPublicQuotes({bool force = false}) async {
     if (!force && _cachedQuotes != null) {
-      return Future.value(_cachedQuotes!);
+      return _cachedQuotes!;
     }
     final activeLoad = _quoteLoad;
-    if (activeLoad != null) return activeLoad;
+    if (activeLoad != null) {
+      if (!force) return activeLoad;
+      try {
+        await activeLoad;
+      } catch (_) {}
+    }
 
     final load = _fetchPublicQuotes();
     _quoteLoad = load;
-    return load.then((quotes) {
+    try {
+      final quotes = await load;
       _cachedQuotes = List<WisdomQuote>.unmodifiable(quotes);
       return _cachedQuotes!;
-    }).whenComplete(() {
+    } finally {
       if (identical(_quoteLoad, load)) _quoteLoad = null;
-    });
+    }
   }
 
   Future<List<WisdomQuote>> _fetchPublicQuotes() async {
@@ -2128,72 +2177,101 @@ class _OpeningScreen extends StatelessWidget {
                 painter: _OpeningScenePainter(eased, isDark: isDark),
               ),
               SafeArea(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Padding(
-                      padding: const EdgeInsets.all(28),
-                      child: Transform.translate(
-                        offset: Offset(0, 24 * (1 - eased)),
-                        child: Opacity(
-                          opacity: eased,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 132,
-                                height: 132,
-                                child: const _AppIconMark(),
-                              ),
-                              const SizedBox(height: 28),
-                              Text(
-                                'Guru Vandan',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.lora(
-                                  color: isDark
-                                      ? AppColors.darkInk
-                                      : AppColors.deepCrimson,
-                                  fontSize: 42,
-                                  height: 1.05,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                appText(
-                                  context,
-                                  'Remembrance. Satsang. Meditation.',
-                                  'स्मरण। सत्संग। ध्यान।',
-                                ),
-                                textAlign: TextAlign.center,
-                                style: _bodyStyle(
-                                  LanguageScope.of(context).language,
-                                  color: AppColors.taupe,
-                                  fontSize: 18,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 32),
-                              SizedBox(
-                                width: 180,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(99),
-                                  child: LinearProgressIndicator(
-                                    value: progress.value,
-                                    minHeight: 7,
-                                    color: _primaryActionColor(),
-                                    backgroundColor:
-                                        _surfaceColor(AppColors.rose),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final iconSize =
+                        (constraints.maxHeight * 0.13).clamp(76.0, 132.0);
+                    final titleSize =
+                        (constraints.maxWidth * 0.105).clamp(31.0, 42.0);
+                    final logoGap =
+                        (constraints.maxHeight * 0.025).clamp(14.0, 28.0);
+                    final progressGap =
+                        (constraints.maxHeight * 0.028).clamp(16.0, 32.0);
+
+                    return Align(
+                      alignment: Alignment.topCenter,
+                      child: FractionallySizedBox(
+                        heightFactor: 0.60,
+                        widthFactor: 1,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 24),
+                              child: Transform.translate(
+                                offset: Offset(0, 18 * (1 - eased)),
+                                child: Opacity(
+                                  opacity: eased,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: iconSize,
+                                        height: iconSize,
+                                        child: const _AppIconMark(),
+                                      ),
+                                      SizedBox(height: logoGap),
+                                      Text(
+                                        'Guru Vandan',
+                                        textAlign: TextAlign.center,
+                                        maxLines: 1,
+                                        style: GoogleFonts.lora(
+                                          color: isDark
+                                              ? AppColors.darkInk
+                                              : AppColors.deepCrimson,
+                                          fontSize: titleSize,
+                                          height: 1.05,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        appText(
+                                          context,
+                                          'Remembrance. Satsang. Meditation.',
+                                          'स्मरण। सत्संग। ध्यान।',
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        style: _bodyStyle(
+                                          LanguageScope.of(context).language,
+                                          color: AppColors.taupe,
+                                          fontSize: constraints.maxWidth < 340
+                                              ? 15
+                                              : 18,
+                                          height: 1.3,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      SizedBox(height: progressGap),
+                                      SizedBox(
+                                        width: min(
+                                          180,
+                                          constraints.maxWidth * 0.5,
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(99),
+                                          child: LinearProgressIndicator(
+                                            value: progress.value,
+                                            minHeight: 7,
+                                            color: _primaryActionColor(),
+                                            backgroundColor: _surfaceColor(
+                                              AppColors.rose,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -2260,22 +2338,27 @@ class _OpeningScenePainter extends CustomPainter {
           : AppColors.maroon.withValues(alpha: 0.36)
       ..style = PaintingStyle.stroke
       ..strokeWidth = isDark ? 2.2 : 1.2;
-    final baseY = size.height * 0.82;
-    final templeWidth = min(size.width * 0.48, 230.0);
+    final templeScale = (size.height / 780).clamp(0.58, 1.0);
+    final baseY = size.height * 0.84;
+    final templeWidth = min(size.width * 0.48, min(230.0, size.height * 0.34));
     final templeLeft = (size.width - templeWidth) / 2;
     final templeRight = templeLeft + templeWidth;
     final pillarWidth = templeWidth * 0.1;
 
     final roof = Path()
-      ..moveTo(templeLeft + templeWidth * 0.08, baseY - 74)
-      ..lineTo(size.width / 2, baseY - 132 - 18 * progress)
-      ..lineTo(templeRight - templeWidth * 0.08, baseY - 74)
+      ..moveTo(templeLeft + templeWidth * 0.08, baseY - 74 * templeScale)
+      ..lineTo(size.width / 2, baseY - (132 + 18 * progress) * templeScale)
+      ..lineTo(templeRight - templeWidth * 0.08, baseY - 74 * templeScale)
       ..close();
     canvas.drawPath(roof, foreground);
     canvas.drawPath(roof, templeOutline);
     final templeLintel = RRect.fromRectAndRadius(
       Rect.fromLTWH(
-          templeLeft + templeWidth * 0.18, baseY - 72, templeWidth * 0.64, 10),
+        templeLeft + templeWidth * 0.18,
+        baseY - 72 * templeScale,
+        templeWidth * 0.64,
+        10 * templeScale,
+      ),
       const Radius.circular(3),
     );
     canvas.drawRRect(templeLintel, foreground);
@@ -2287,7 +2370,12 @@ class _OpeningScenePainter extends CustomPainter {
       templeLeft + templeWidth * 0.75,
     ]) {
       final pillar = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x - pillarWidth / 2, baseY - 66, pillarWidth, 66),
+        Rect.fromLTWH(
+          x - pillarWidth / 2,
+          baseY - 66 * templeScale,
+          pillarWidth,
+          66 * templeScale,
+        ),
         const Radius.circular(4),
       );
       canvas.drawRRect(pillar, foreground);
@@ -2295,24 +2383,43 @@ class _OpeningScenePainter extends CustomPainter {
     }
     final templeBase = RRect.fromRectAndRadius(
       Rect.fromLTWH(
-          templeLeft + templeWidth * 0.14, baseY, templeWidth * 0.72, 12),
+        templeLeft + templeWidth * 0.14,
+        baseY,
+        templeWidth * 0.72,
+        12 * templeScale,
+      ),
       const Radius.circular(4),
     );
     canvas.drawRRect(templeBase, foreground);
     canvas.drawRRect(templeBase, templeOutline);
 
-    final diyaCenter = Offset(size.width * 0.5, size.height * 0.9);
+    final diyaCenter = Offset(size.width * 0.5, size.height * 0.93);
+    final flameHeight = 70 * templeScale;
     final flame = Path()
-      ..moveTo(diyaCenter.dx, diyaCenter.dy - 70 * progress)
-      ..cubicTo(diyaCenter.dx - 25, diyaCenter.dy - 38, diyaCenter.dx - 8,
-          diyaCenter.dy - 18, diyaCenter.dx, diyaCenter.dy - 28)
-      ..cubicTo(diyaCenter.dx + 18, diyaCenter.dy - 49, diyaCenter.dx + 11,
-          diyaCenter.dy - 59, diyaCenter.dx, diyaCenter.dy - 70 * progress)
+      ..moveTo(diyaCenter.dx, diyaCenter.dy - flameHeight * progress)
+      ..cubicTo(
+          diyaCenter.dx - 25 * templeScale,
+          diyaCenter.dy - 38 * templeScale,
+          diyaCenter.dx - 8 * templeScale,
+          diyaCenter.dy - 18 * templeScale,
+          diyaCenter.dx,
+          diyaCenter.dy - 28 * templeScale)
+      ..cubicTo(
+          diyaCenter.dx + 18 * templeScale,
+          diyaCenter.dy - 49 * templeScale,
+          diyaCenter.dx + 11 * templeScale,
+          diyaCenter.dy - 59 * templeScale,
+          diyaCenter.dx,
+          diyaCenter.dy - flameHeight * progress)
       ..close();
     canvas.drawPath(
         flame, Paint()..color = AppColors.gold.withValues(alpha: progress));
     canvas.drawOval(
-      Rect.fromCenter(center: diyaCenter, width: 150, height: 34),
+      Rect.fromCenter(
+        center: diyaCenter,
+        width: 150 * templeScale,
+        height: 34 * templeScale,
+      ),
       Paint()..color = AppColors.maroon.withValues(alpha: 0.9),
     );
   }
@@ -6878,6 +6985,7 @@ class _WisdomScreen extends StatelessWidget {
             ],
             _SectionHeader(
               title: appText(context, 'Quote of the Day', 'आज का वचन'),
+              action: _WisdomRefreshButton(onRefresh: onRefresh),
             ),
             if (dailyQuote != null)
               _WisdomFeature(
@@ -6898,6 +7006,44 @@ class _WisdomScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _WisdomRefreshButton extends StatefulWidget {
+  const _WisdomRefreshButton({required this.onRefresh});
+
+  final Future<void> Function() onRefresh;
+
+  @override
+  State<_WisdomRefreshButton> createState() => _WisdomRefreshButtonState();
+}
+
+class _WisdomRefreshButtonState extends State<_WisdomRefreshButton> {
+  bool refreshing = false;
+
+  Future<void> _refresh() async {
+    if (refreshing) return;
+    setState(() => refreshing = true);
+    try {
+      await widget.onRefresh();
+    } finally {
+      if (mounted) setState(() => refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.filledTonal(
+      key: const Key('refresh-wisdom-quotes'),
+      onPressed: refreshing ? null : _refresh,
+      tooltip: appText(context, 'Refresh quotes', 'वचन पुनः लोड करें'),
+      icon: refreshing
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            )
+          : const Icon(Icons.refresh_rounded),
     );
   }
 }

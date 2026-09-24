@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
@@ -50,6 +51,34 @@ void main() {
     expect(find.text('Middle name'), findsOneWidget);
     expect(find.text('Last name'), findsOneWidget);
     expect(find.text('Today\'s Sacred Practice'), findsNothing);
+  });
+
+  testWidgets('Opening copy stays above the temple on compact devices',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:language': 'english',
+    });
+    for (final size in const [
+      Size(320, 480),
+      Size(360, 640),
+      Size(430, 932),
+      Size(900, 1600),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(GuruvandanApp(
+        key: ValueKey('opening-${size.width}-${size.height}'),
+        firebaseReady: false,
+        showOpening: true,
+      ));
+      await tester.pump(const Duration(milliseconds: 900));
+
+      final subtitle = find.text('Remembrance. Satsang. Meditation.');
+      expect(subtitle, findsOneWidget);
+      expect(tester.getBottomRight(subtitle).dy, lessThan(size.height * 0.60));
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 3));
+    }
+    await tester.binding.setSurfaceSize(null);
   });
 
   test('Firebase quote records normalize legacy author names', () {
@@ -126,6 +155,38 @@ void main() {
     expect(loadCount, 2);
   });
 
+  test('Manual quote refresh fetches again during the startup load', () async {
+    final firstLoad = Completer<List<WisdomQuote>>();
+    var loadCount = 0;
+    final service = FirebaseContentService(
+      true,
+      quoteLoader: () {
+        loadCount++;
+        if (loadCount == 1) return firstLoad.future;
+        return Future.value(const [
+          WisdomQuote(id: 'fresh', text: 'Fresh quote'),
+        ]);
+      },
+    );
+    addTearDown(service.dispose);
+
+    final iterator = StreamIterator(service.quotes());
+    final initialMove = iterator.moveNext();
+    await Future<void>.delayed(Duration.zero);
+    final refresh = service.refreshQuotes();
+    firstLoad.complete(const [
+      WisdomQuote(id: 'old', text: 'Old quote'),
+    ]);
+
+    expect(await initialMove, isTrue);
+    expect(iterator.current.single.id, 'old');
+    await refresh;
+    expect(loadCount, 2);
+    expect(await iterator.moveNext(), isTrue);
+    expect(iterator.current.single.id, 'fresh');
+    await iterator.cancel();
+  });
+
   test('Quote queue advances one quote per calendar day', () {
     const quotes = [
       WisdomQuote(id: 'oldest', text: 'First', createdAt: 1),
@@ -135,11 +196,11 @@ void main() {
 
     final firstDay = quoteTimelineForDate(
       quotes,
-      now: DateTime(2026, 9, 13),
+      now: DateTime(2026, 9, 24),
     );
     final secondDay = quoteTimelineForDate(
       quotes,
-      now: DateTime(2026, 9, 14),
+      now: DateTime(2026, 9, 25),
     );
 
     expect(firstDay.daily?.id, 'newest');
@@ -148,8 +209,33 @@ void main() {
     expect(secondDay.daily?.id, 'middle');
     expect(secondDay.archive.map((quote) => quote.id), ['newest']);
     expect(secondDay.upcoming.map((quote) => quote.id), ['oldest']);
-    expect(nextQuoteScheduleDate(quotes, now: DateTime(2026, 9, 13)),
-        DateTime(2026, 9, 16));
+    expect(nextQuoteScheduleDate(quotes, now: DateTime(2026, 9, 24)),
+        DateTime(2026, 9, 27));
+  });
+
+  test('Quotes scheduled before day zero restart from today', () {
+    const quotes = [
+      WisdomQuote(
+        id: 'older-upload',
+        text: 'First uploaded quote',
+        createdAt: 1,
+        scheduledDate: '2026-09-13',
+      ),
+      WisdomQuote(
+        id: 'newer-upload',
+        text: 'Second uploaded quote',
+        createdAt: 2,
+        scheduledDate: '2026-09-14',
+      ),
+    ];
+
+    final today = quoteTimelineForDate(quotes, now: DateTime(2026, 9, 24));
+    final tomorrow = quoteTimelineForDate(quotes, now: DateTime(2026, 9, 25));
+
+    expect(today.daily?.id, 'newer-upload');
+    expect(today.archive, isEmpty);
+    expect(today.upcoming.single.id, 'older-upload');
+    expect(tomorrow.daily?.id, 'older-upload');
   });
 
   testWidgets('Quote links identify the exact quote on web and in the app',
@@ -648,6 +734,7 @@ void main() {
     expect(find.text('Quote of the Day'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
     expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.byKey(const Key('refresh-wisdom-quotes')), findsOneWidget);
   });
 
   testWidgets('More tab switches app language to Hindi', (tester) async {
