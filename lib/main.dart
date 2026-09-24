@@ -2328,32 +2328,9 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
-class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
+class _AuthGateState extends State<AuthGate> {
   late final Future<String?> startup = _prepareAuthStartup();
   bool keepRememberedSession = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed &&
-        widget.firebaseReady &&
-        keepRememberedSession &&
-        FirebaseAuth.instance.currentUser == null &&
-        !kIsWeb) {
-      unawaited(_restoreNativeGoogleSession());
-    }
-  }
 
   Future<String?> _prepareAuthStartup() async {
     final language = LanguageScope.of(context).language;
@@ -2375,10 +2352,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
     }
     keepRememberedSession = rememberedUid.isNotEmpty;
 
-    if (!kIsWeb) {
-      await _restoreNativeGoogleSession();
-      return null;
-    }
+    if (!kIsWeb) return null;
 
     try {
       await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
@@ -9918,75 +9892,6 @@ Future<void> _rememberAuthenticatedUser(User user) async {
 Future<void> _forgetAuthenticatedUser() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove(_rememberedAuthUidKey);
-}
-
-Future<GoogleSignInAccount?> _attemptNativeGoogleSessionRestore() async {
-  final completer = Completer<GoogleSignInAccount?>();
-  late final StreamSubscription<GoogleSignInAuthenticationEvent> subscription;
-  subscription = GoogleSignIn.instance.authenticationEvents.listen(
-    (event) {
-      if (event is GoogleSignInAuthenticationEventSignIn &&
-          !completer.isCompleted) {
-        completer.complete(event.user);
-      } else if (event is GoogleSignInAuthenticationEventSignOut &&
-          !completer.isCompleted) {
-        completer.complete(null);
-      }
-    },
-    onError: (_) {
-      if (!completer.isCompleted) completer.complete(null);
-    },
-  );
-
-  try {
-    final attempt = GoogleSignIn.instance.attemptLightweightAuthentication();
-    if (attempt != null) {
-      final account = await attempt.timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => null,
-      );
-      if (account != null) return account;
-      if (completer.isCompleted) return completer.future;
-      return await completer.future.timeout(
-        const Duration(milliseconds: 700),
-        onTimeout: () => null,
-      );
-    }
-
-    return await completer.future.timeout(
-      const Duration(seconds: 4),
-      onTimeout: () => null,
-    );
-  } finally {
-    await subscription.cancel();
-  }
-}
-
-Future<User?> _restoreNativeGoogleSession() async {
-  final existingUser = FirebaseAuth.instance.currentUser;
-  if (kIsWeb || existingUser != null) return existingUser;
-
-  try {
-    await _ensureGoogleSignInReady();
-    for (var attempt = 0; attempt < 2; attempt++) {
-      final account = await _attemptNativeGoogleSessionRestore();
-      final idToken = account?.authentication.idToken;
-      if (idToken != null && idToken.isNotEmpty) {
-        final credential = await FirebaseAuth.instance.signInWithCredential(
-          GoogleAuthProvider.credential(idToken: idToken),
-        );
-        final user = credential.user;
-        if (user != null) await _rememberAuthenticatedUser(user);
-        return user;
-      }
-      if (attempt == 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 650));
-      }
-    }
-    return FirebaseAuth.instance.currentUser;
-  } catch (_) {
-    return FirebaseAuth.instance.currentUser;
-  }
 }
 
 typedef _ConfirmAccountLink = Future<bool> Function(

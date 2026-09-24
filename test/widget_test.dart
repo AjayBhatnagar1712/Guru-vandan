@@ -292,7 +292,7 @@ void main() {
     expect(formatActivityDuration(3900), '1h 5m');
   });
 
-  test('Remembered login survives a temporary native restore failure', () {
+  test('Remembered login remains active without automatic provider login', () {
     expect(
       shouldUseRememberedAuthSession(
         startupComplete: true,
