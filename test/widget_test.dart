@@ -292,6 +292,26 @@ void main() {
     expect(formatActivityDuration(3900), '1h 5m');
   });
 
+  test('Meditation presets validate values and default in ascending order', () {
+    expect(
+      normalizeMeditationPresetMinutes(
+        const ['30', '5', '5', '0', '1440', 'invalid'],
+      ),
+      const [30, 5],
+    );
+    expect(
+      normalizeMeditationPresetMinutes(null, useDefaultsWhenEmpty: true),
+      defaultMeditationPresetMinutes,
+    );
+  });
+
+  test('Meditation presets can be rearranged by dragging', () {
+    expect(
+      reorderMeditationPresetMinutes(const [5, 10, 15], 15, 5),
+      const [15, 10, 5],
+    );
+  });
+
   test('Remembered login remains active without automatic provider login', () {
     expect(
       shouldUseRememberedAuthSession(
@@ -736,10 +756,10 @@ void main() {
     await tester.tap(find.text('Meditation').first);
     await tester.pumpAndSettle();
 
-    final customChip = find.widgetWithText(ChoiceChip, 'Custom');
+    final customChip = find.widgetWithText(ActionChip, 'Custom');
     expect(customChip, findsOneWidget);
     expect(
-      tester.widget<ChoiceChip>(customChip).backgroundColor,
+      tester.widget<ActionChip>(customChip).backgroundColor,
       const Color(0xFF43282D),
     );
     await tester.tap(customChip);
@@ -755,6 +775,50 @@ void main() {
     );
     expect(pickerTheme.data.brightness, Brightness.dark);
     expect(pickerTheme.data.primaryColor, const Color(0xFFE2BC73));
+  });
+
+  testWidgets('Saved meditation timers persist and support delete mode',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'english',
+      'guruvandan_flutter:meditation_presets': ['1', '5', '10'],
+      'guruvandan_flutter:selected_meditation_minutes': 1,
+    });
+
+    await tester.pumpWidget(
+        const GuruvandanApp(firebaseReady: false, showOpening: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Enter'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Meditation').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('meditation-preset-1')), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Custom'), findsOneWidget);
+
+    await tester.longPress(
+      find.byKey(const ValueKey('meditation-preset-1')),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Done'), findsOneWidget);
+    expect(
+      find.byKey(const Key('delete-meditation-preset-5')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('delete-meditation-preset-5')));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getStringList('guruvandan_flutter:meditation_presets'),
+      const ['1', '10'],
+    );
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('Meditation start asks user to put phone on silent',

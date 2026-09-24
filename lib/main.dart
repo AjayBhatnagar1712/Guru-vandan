@@ -38,6 +38,10 @@ const _googleServerClientId =
     '540841544767-tlaebghbususiucprk4g2i2t1n2m5fmk.apps.googleusercontent.com';
 const _rememberedAuthUidKey = 'guruvandan_flutter:authenticated_uid';
 const _authenticatedProfileKeyPrefix = 'guruvandan_flutter:name:';
+const _meditationPresetsKey = 'guruvandan_flutter:meditation_presets';
+const _selectedMeditationMinutesKey =
+    'guruvandan_flutter:selected_meditation_minutes';
+const defaultMeditationPresetMinutes = <int>[5, 10, 15, 20, 25, 30];
 
 const _firebaseApiKey = String.fromEnvironment(
   'FIREBASE_API_KEY',
@@ -3017,7 +3021,8 @@ class _DevoteeShellState extends State<DevoteeShell>
 
   int selectedDurationSeconds = 10 * 60;
   int remainingSeconds = 10 * 60;
-  bool customMeditationDurationSelected = false;
+  List<int> meditationPresetMinutes = [...defaultMeditationPresetMinutes];
+  bool meditationPresetEditMode = false;
   bool meditationRunning = false;
   bool meditationComplete = false;
   bool meditationFinishing = false;
@@ -3171,6 +3176,14 @@ class _DevoteeShellState extends State<DevoteeShell>
       ? likedQuotesKey
       : '$likedQuotesKey:${widget.user!.uid}';
 
+  String get _meditationPresetsStorageKey => widget.user == null
+      ? _meditationPresetsKey
+      : '$_meditationPresetsKey:${widget.user!.uid}';
+
+  String get _selectedMeditationMinutesStorageKey => widget.user == null
+      ? _selectedMeditationMinutesKey
+      : '$_selectedMeditationMinutesKey:${widget.user!.uid}';
+
   DatabaseReference? get _cloudUserReference {
     final user = widget.user;
     if (!widget.firebaseReady || user == null) return null;
@@ -3249,7 +3262,12 @@ class _DevoteeShellState extends State<DevoteeShell>
 
   void _selectTab(PracticeTab value) {
     if (tab == value) return;
-    setState(() => tab = value);
+    setState(() {
+      tab = value;
+      if (value != PracticeTab.meditate) {
+        meditationPresetEditMode = false;
+      }
+    });
     unawaited(_trackActivity('screen_view', label: value.name));
   }
 
@@ -3396,6 +3414,26 @@ class _DevoteeShellState extends State<DevoteeShell>
         (widget.user == null ? null : prefs.getString(routineKey));
     final localLikedQuotes =
         prefs.getStringList(_likedQuotesStorageKey) ?? const <String>[];
+    final savedMeditationPresets =
+        prefs.getStringList(_meditationPresetsStorageKey) ??
+            (widget.user == null
+                ? null
+                : prefs.getStringList(_meditationPresetsKey));
+    meditationPresetMinutes = normalizeMeditationPresetMinutes(
+      savedMeditationPresets,
+      useDefaultsWhenEmpty: true,
+    );
+    final savedMeditationMinutes =
+        prefs.getInt(_selectedMeditationMinutesStorageKey) ??
+            (widget.user == null
+                ? null
+                : prefs.getInt(_selectedMeditationMinutesKey));
+    if (savedMeditationMinutes != null &&
+        savedMeditationMinutes >= 1 &&
+        savedMeditationMinutes < 24 * 60) {
+      selectedDurationSeconds = savedMeditationMinutes * 60;
+      remainingSeconds = selectedDurationSeconds;
+    }
     var savedProfile = DevoteeProfile.fromStoredValue(savedUserName);
 
     if (savedProfile == null && widget.user == null) {
@@ -3449,6 +3487,19 @@ class _DevoteeShellState extends State<DevoteeShell>
     if (mounted) setState(() {});
     unawaited(_trackActivity('app_opened', label: 'Home'));
     _scheduleWelcomeDialog();
+  }
+
+  Future<void> _saveMeditationPresetState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final values =
+        meditationPresetMinutes.map((minutes) => '$minutes').toList();
+    final selectedMinutes = selectedDurationSeconds ~/ 60;
+    await prefs.setStringList(_meditationPresetsStorageKey, values);
+    await prefs.setInt(_selectedMeditationMinutesStorageKey, selectedMinutes);
+    if (widget.user != null) {
+      await prefs.setStringList(_meditationPresetsKey, values);
+      await prefs.setInt(_selectedMeditationMinutesKey, selectedMinutes);
+    }
   }
 
   Future<void> _saveProfile(DevoteeProfile profile) async {
@@ -3845,13 +3896,10 @@ class _DevoteeShellState extends State<DevoteeShell>
   }
 
   void _setMeditationPresetMinutes(int minutes) {
-    _setMeditationDuration(
-      Duration(minutes: minutes),
-      custom: false,
-    );
+    _setMeditationDuration(Duration(minutes: minutes));
   }
 
-  void _setMeditationDuration(Duration duration, {required bool custom}) {
+  void _setMeditationDuration(Duration duration) {
     unawaited(_recordMeditationActivity(completed: false));
     meditationRunToken++;
     meditationTimer?.cancel();
@@ -3863,7 +3911,7 @@ class _DevoteeShellState extends State<DevoteeShell>
     setState(() {
       selectedDurationSeconds = safeSeconds;
       remainingSeconds = safeSeconds;
-      customMeditationDurationSelected = custom;
+      meditationPresetEditMode = false;
       meditationRunning = false;
       meditationComplete = false;
       meditationFinishing = false;
@@ -3874,6 +3922,7 @@ class _DevoteeShellState extends State<DevoteeShell>
       mantraLoopEnabled = false;
       mantraLoopPlaying = false;
     });
+    unawaited(_saveMeditationPresetState());
   }
 
   Future<void> _openCustomMeditationDuration() async {
@@ -3889,7 +3938,50 @@ class _DevoteeShellState extends State<DevoteeShell>
     );
 
     if (picked == null) return;
-    _setMeditationDuration(picked, custom: true);
+    final minutes = _minimumMeditationDuration(picked).inMinutes;
+    setState(() {
+      if (!meditationPresetMinutes.contains(minutes)) {
+        meditationPresetMinutes = [...meditationPresetMinutes, minutes]..sort();
+      }
+    });
+    _setMeditationDuration(Duration(minutes: minutes));
+  }
+
+  void _beginMeditationPresetEditing() {
+    if (meditationRunning || meditationChantPhase != null) return;
+    if (!meditationPresetEditMode) {
+      setState(() => meditationPresetEditMode = true);
+    }
+  }
+
+  void _finishMeditationPresetEditing() {
+    if (meditationPresetEditMode) {
+      setState(() => meditationPresetEditMode = false);
+    }
+  }
+
+  void _removeMeditationPreset(int minutes) {
+    if (meditationRunning || meditationChantPhase != null) return;
+    setState(() {
+      meditationPresetMinutes =
+          meditationPresetMinutes.where((preset) => preset != minutes).toList();
+      if (meditationPresetMinutes.isEmpty) {
+        meditationPresetEditMode = false;
+      }
+    });
+    unawaited(_saveMeditationPresetState());
+  }
+
+  void _reorderMeditationPresets(int draggedMinutes, int targetMinutes) {
+    if (meditationRunning || meditationChantPhase != null) return;
+    final reordered = reorderMeditationPresetMinutes(
+      meditationPresetMinutes,
+      draggedMinutes,
+      targetMinutes,
+    );
+    if (listEquals(reordered, meditationPresetMinutes)) return;
+    setState(() => meditationPresetMinutes = reordered);
+    unawaited(_saveMeditationPresetState());
   }
 
   void _toggleMeditation() {
@@ -4337,10 +4429,15 @@ class _DevoteeShellState extends State<DevoteeShell>
         meditationComplete: meditationComplete,
         meditationChantPhase: meditationChantPhase,
         mantraLoopEnabled: mantraLoopEnabled,
-        customDurationSelected: customMeditationDurationSelected,
+        presetMinutes: meditationPresetMinutes,
+        presetEditMode: meditationPresetEditMode,
         todayDone: today[RoutineTask.meditation.name] == true,
         onPresetMinutesChanged: _setMeditationPresetMinutes,
         onCustomDuration: _openCustomMeditationDuration,
+        onPresetEditStarted: _beginMeditationPresetEditing,
+        onPresetEditFinished: _finishMeditationPresetEditing,
+        onPresetRemoved: _removeMeditationPreset,
+        onPresetReordered: _reorderMeditationPresets,
         onMantraLoopChanged: _setMantraLoopEnabled,
         onToggle: _toggleMeditation,
         onReset: _resetMeditation,
@@ -5953,10 +6050,15 @@ class _MeditationScreen extends StatelessWidget {
     required this.meditationComplete,
     required this.meditationChantPhase,
     required this.mantraLoopEnabled,
-    required this.customDurationSelected,
+    required this.presetMinutes,
+    required this.presetEditMode,
     required this.todayDone,
     required this.onPresetMinutesChanged,
     required this.onCustomDuration,
+    required this.onPresetEditStarted,
+    required this.onPresetEditFinished,
+    required this.onPresetRemoved,
+    required this.onPresetReordered,
     required this.onMantraLoopChanged,
     required this.onToggle,
     required this.onReset,
@@ -5968,10 +6070,15 @@ class _MeditationScreen extends StatelessWidget {
   final bool meditationComplete;
   final MeditationChantPhase? meditationChantPhase;
   final bool mantraLoopEnabled;
-  final bool customDurationSelected;
+  final List<int> presetMinutes;
+  final bool presetEditMode;
   final bool todayDone;
   final ValueChanged<int> onPresetMinutesChanged;
   final VoidCallback onCustomDuration;
+  final VoidCallback onPresetEditStarted;
+  final VoidCallback onPresetEditFinished;
+  final ValueChanged<int> onPresetRemoved;
+  final void Function(int draggedMinutes, int targetMinutes) onPresetReordered;
   final ValueChanged<bool> onMantraLoopChanged;
   final VoidCallback onToggle;
   final VoidCallback onReset;
@@ -6091,58 +6198,67 @@ class _MeditationScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
+              if (presetEditMode) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        appText(
+                          context,
+                          'Drag to arrange or tap × to delete',
+                          'क्रम बदलने के लिए खींचें या हटाने के लिए × दबाएँ',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _readableColor(AppColors.taupe),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: onPresetEditFinished,
+                      child: Text(appText(context, 'Done', 'पूर्ण')),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
                 alignment: WrapAlignment.center,
                 children: [
-                  ...[5, 10, 15, 20, 25, 30].map((minutes) {
-                    final active = !customDurationSelected &&
-                        selectedDurationSeconds == minutes * 60;
-                    return ChoiceChip(
-                      label: Text(appText(
-                        context,
-                        '${minutes}m',
-                        '$minutes मि.',
-                      )),
+                  ...presetMinutes.asMap().entries.map((entry) {
+                    final minutes = entry.value;
+                    final active = selectedDurationSeconds == minutes * 60;
+                    return _MeditationPresetChip(
+                      key: ValueKey('meditation-preset-$minutes'),
+                      minutes: minutes,
+                      orderIndex: entry.key,
                       selected: active,
-                      onSelected: locked
-                          ? null
-                          : (_) => onPresetMinutesChanged(minutes),
-                      selectedColor: _primaryActionColor(),
-                      backgroundColor: _surfaceColor(AppColors.rose),
-                      labelStyle: TextStyle(
-                        color: active
-                            ? _onPrimaryActionColor()
-                            : _readableColor(AppColors.maroon),
-                        fontWeight: FontWeight.w900,
-                      ),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
+                      locked: locked,
+                      editing: presetEditMode,
+                      onSelected: () => onPresetMinutesChanged(minutes),
+                      onEditStarted: onPresetEditStarted,
+                      onDelete: () => onPresetRemoved(minutes),
+                      onReorder: (draggedMinutes) =>
+                          onPresetReordered(draggedMinutes, minutes),
                     );
                   }),
-                  ChoiceChip(
+                  ActionChip(
                     avatar: Icon(
-                      Icons.schedule_rounded,
+                      Icons.add_alarm_rounded,
                       size: 18,
-                      color: customDurationSelected
-                          ? _onPrimaryActionColor()
-                          : _readableColor(AppColors.maroon),
+                      color: _readableColor(AppColors.maroon),
                     ),
-                    label: Text(customDurationSelected
-                        ? _formatDurationLabel(
-                            context, Duration(seconds: selectedDurationSeconds))
-                        : appText(context, 'Custom', 'स्वनिर्धारित')),
-                    selected: customDurationSelected,
-                    onSelected: locked ? null : (_) => onCustomDuration(),
-                    selectedColor: _primaryActionColor(),
+                    label: Text(appText(context, 'Custom', 'स्वनिर्धारित')),
+                    onPressed:
+                        locked || presetEditMode ? null : onCustomDuration,
                     backgroundColor: _surfaceColor(AppColors.rose),
                     labelStyle: TextStyle(
-                      color: customDurationSelected
-                          ? _onPrimaryActionColor()
-                          : _readableColor(AppColors.maroon),
+                      color: _readableColor(AppColors.maroon),
                       fontWeight: FontWeight.w900,
                     ),
                     shape: RoundedRectangleBorder(
@@ -6214,6 +6330,174 @@ class _MeditationScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MeditationPresetChip extends StatefulWidget {
+  const _MeditationPresetChip({
+    required this.minutes,
+    required this.orderIndex,
+    required this.selected,
+    required this.locked,
+    required this.editing,
+    required this.onSelected,
+    required this.onEditStarted,
+    required this.onDelete,
+    required this.onReorder,
+    super.key,
+  });
+
+  final int minutes;
+  final int orderIndex;
+  final bool selected;
+  final bool locked;
+  final bool editing;
+  final VoidCallback onSelected;
+  final VoidCallback onEditStarted;
+  final VoidCallback onDelete;
+  final ValueChanged<int> onReorder;
+
+  @override
+  State<_MeditationPresetChip> createState() => _MeditationPresetChipState();
+}
+
+class _MeditationPresetChipState extends State<_MeditationPresetChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController shakeController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 150),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.editing) shakeController.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MeditationPresetChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.editing == oldWidget.editing) return;
+    if (widget.editing) {
+      shakeController.repeat(reverse: true);
+    } else {
+      shakeController
+        ..stop()
+        ..value = 0.5;
+    }
+  }
+
+  @override
+  void dispose() {
+    shakeController.dispose();
+    super.dispose();
+  }
+
+  Widget _chip(BuildContext context, {required bool interactive}) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ChoiceChip(
+          label: Text(_formatDurationLabel(
+            context,
+            Duration(minutes: widget.minutes),
+          )),
+          selected: widget.selected,
+          onSelected: !interactive || widget.locked || widget.editing
+              ? null
+              : (_) => widget.onSelected(),
+          selectedColor: _primaryActionColor(),
+          backgroundColor: _surfaceColor(AppColors.rose),
+          labelStyle: TextStyle(
+            color: widget.selected
+                ? _onPrimaryActionColor()
+                : _readableColor(AppColors.maroon),
+            fontWeight: FontWeight.w900,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        if (widget.editing && interactive)
+          Positioned(
+            right: -8,
+            top: -8,
+            child: Semantics(
+              button: true,
+              label: appText(context, 'Delete timer', 'समय हटाएँ'),
+              child: InkWell(
+                key: Key('delete-meditation-preset-${widget.minutes}'),
+                customBorder: const CircleBorder(),
+                onTap: widget.onDelete,
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _primaryActionColor(),
+                    border: Border.all(color: _onPrimaryActionColor()),
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 17,
+                    color: _onPrimaryActionColor(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = Padding(
+      padding: EdgeInsets.only(
+        top: widget.editing ? 8 : 0,
+        right: widget.editing ? 8 : 0,
+      ),
+      child: DragTarget<int>(
+        onWillAcceptWithDetails: (details) =>
+            widget.editing && details.data != widget.minutes,
+        onAcceptWithDetails: (details) => widget.onReorder(details.data),
+        builder: (context, candidates, rejected) {
+          final target = candidates.isNotEmpty;
+          return AnimatedScale(
+            scale: target ? 1.08 : 1,
+            duration: const Duration(milliseconds: 120),
+            child: _chip(context, interactive: true),
+          );
+        },
+      ),
+    );
+
+    final draggable = widget.locked
+        ? chip
+        : LongPressDraggable<int>(
+            data: widget.minutes,
+            onDragStarted: widget.onEditStarted,
+            feedback: Material(
+              color: Colors.transparent,
+              child: _chip(context, interactive: false),
+            ),
+            childWhenDragging: Opacity(opacity: 0.34, child: chip),
+            child: chip,
+          );
+
+    return AnimatedBuilder(
+      animation: shakeController,
+      child: draggable,
+      builder: (context, child) {
+        if (!widget.editing) return child!;
+        final direction = widget.orderIndex.isEven ? 1.0 : -1.0;
+        return Transform.rotate(
+          angle: (shakeController.value - 0.5) * 0.045 * direction,
+          child: child,
+        );
+      },
     );
   }
 }
@@ -9753,6 +10037,44 @@ String _formatSeconds(int total) {
     return '${hours.toString().padLeft(2, '0')}:$minutes:$seconds';
   }
   return '$minutes:$seconds';
+}
+
+List<int> normalizeMeditationPresetMinutes(
+  Iterable<String>? values, {
+  bool useDefaultsWhenEmpty = false,
+}) {
+  final normalized = <int>[];
+  for (final value in values ?? const <String>[]) {
+    final minutes = int.tryParse(value.trim());
+    if (minutes == null ||
+        minutes < 1 ||
+        minutes >= 24 * 60 ||
+        normalized.contains(minutes)) {
+      continue;
+    }
+    normalized.add(minutes);
+  }
+  if (normalized.isEmpty && useDefaultsWhenEmpty) {
+    return [...defaultMeditationPresetMinutes];
+  }
+  return normalized;
+}
+
+List<int> reorderMeditationPresetMinutes(
+  List<int> values,
+  int draggedMinutes,
+  int targetMinutes,
+) {
+  final reordered = [...values];
+  final draggedIndex = reordered.indexOf(draggedMinutes);
+  final targetIndex = reordered.indexOf(targetMinutes);
+  if (draggedIndex < 0 || targetIndex < 0 || draggedIndex == targetIndex) {
+    return reordered;
+  }
+  final target = reordered[targetIndex];
+  reordered[targetIndex] = reordered[draggedIndex];
+  reordered[draggedIndex] = target;
+  return reordered;
 }
 
 Duration _minimumMeditationDuration(Duration duration) {
