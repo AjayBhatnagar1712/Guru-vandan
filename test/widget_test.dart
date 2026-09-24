@@ -238,6 +238,106 @@ void main() {
     expect(tomorrow.daily?.id, 'older-upload');
   });
 
+  test('Sacred history combines routine records with timed activity', () {
+    final date = DateTime(2026, 9, 24);
+    final history = sacredActivityHistory(
+      records: {
+        dateKey(date): {
+          'morningSatsang': true,
+          'meditation': true,
+        },
+      },
+      events: [
+        DevoteeActivityEvent(
+          id: 'morning',
+          type: 'satsang_listened',
+          timestamp: date.add(const Duration(hours: 7)).millisecondsSinceEpoch,
+          label: 'morning: Astuti',
+          durationSeconds: 600,
+          completed: true,
+        ),
+        DevoteeActivityEvent(
+          id: 'meditation',
+          type: 'meditation_session',
+          timestamp: date.add(const Duration(hours: 8)).millisecondsSinceEpoch,
+          durationSeconds: 900,
+          completed: true,
+        ),
+      ],
+    );
+
+    final day = history[dateKey(date)]!;
+    expect(day.morningSatsang, isTrue);
+    expect(day.eveningSatsang, isFalse);
+    expect(day.meditation, isTrue);
+    expect(day.morningSatsangSeconds, 600);
+    expect(day.meditationSeconds, 900);
+  });
+
+  test('Sacred streak selects the strongest current and longest activity', () {
+    final history = sacredActivityHistory(
+      records: {
+        '2026-09-21': {'meditation': true},
+        '2026-09-22': {'meditation': true, 'morningSatsang': true},
+        '2026-09-23': {'meditation': true, 'morningSatsang': true},
+        '2026-09-24': {'meditation': true, 'morningSatsang': true},
+      },
+      events: const [],
+    );
+
+    final overview = sacredStreakOverviewFor(
+      history: history,
+      accountCreatedAt: DateTime(2026, 9, 21),
+      now: DateTime(2026, 9, 24),
+    );
+
+    expect(overview.current.length, 4);
+    expect(overview.current.kind, SacredStreakKind.meditation);
+    expect(overview.longest.length, 4);
+    expect(overview.longest.start, DateTime(2026, 9, 21));
+    expect(overview.longest.end, DateTime(2026, 9, 24));
+  });
+
+  test('Streak analytics compares individual and combined practices', () {
+    final history = sacredActivityHistory(
+      records: {
+        '2026-09-20': {
+          'morningSatsang': true,
+          'eveningSatsang': true,
+          'meditation': true,
+        },
+        '2026-09-21': {
+          'morningSatsang': true,
+          'eveningSatsang': true,
+          'meditation': true,
+        },
+        '2026-09-22': {
+          'morningSatsang': true,
+          'meditation': true,
+        },
+      },
+      events: const [],
+    );
+
+    expect(
+      sacredActivityDaysForKind(history, SacredStreakKind.meditation),
+      3,
+    );
+    expect(
+      sacredActivityDaysForKind(history, SacredStreakKind.fullPractice),
+      2,
+    );
+    expect(
+      sacredLongestStreakForKind(
+        history: history,
+        accountCreatedAt: DateTime(2026, 9, 20),
+        kind: SacredStreakKind.fullPractice,
+        now: DateTime(2026, 9, 24),
+      ).length,
+      2,
+    );
+  });
+
   testWidgets('Quote links identify the exact quote on web and in the app',
       (tester) async {
     late BuildContext context;
@@ -372,6 +472,30 @@ void main() {
     expect(activity.events.first.type, 'quote_shared');
   });
 
+  test('Admin user search matches devotee name and email', () {
+    final users = [
+      DevoteeActivity.fromEntry('uid-ajay', {
+        'name': 'Ajay Bhatnagar',
+        'email': 'ajay@example.com',
+        'createdAt': DateTime(2026, 9, 1).millisecondsSinceEpoch,
+      }),
+      DevoteeActivity.fromEntry('uid-meera', {
+        'name': 'Meera Devi',
+        'email': 'meera@example.com',
+      }),
+    ];
+
+    expect(filterDevoteeActivities(users, 'AJAY').single.uid, 'uid-ajay');
+    expect(
+      filterDevoteeActivities(users, 'meera@example.com').single.uid,
+      'uid-meera',
+    );
+    expect(
+      users.first.accountCreatedOn,
+      DateTime(2026, 9, 1),
+    );
+  });
+
   test('Activity durations use compact admin labels', () {
     expect(formatActivityDuration(42), '42s');
     expect(formatActivityDuration(300), '5m');
@@ -464,8 +588,11 @@ void main() {
 
     final practiceTop =
         tester.getTopLeft(find.text('Today\'s Sacred Practice'));
-    final streakTop = tester.getTopLeft(find.text('Continuity of meditation'));
+    final streakTop = tester.getTopLeft(
+      find.byKey(const Key('sacred-streak-current')),
+    );
     expect(practiceTop.dy, lessThan(streakTop.dy));
+    expect(find.byKey(const Key('sacred-activity-calendar')), findsOneWidget);
   });
 
   testWidgets('Completed practice shows only the leading tick', (tester) async {
@@ -561,7 +688,8 @@ void main() {
     expect(find.text('guruvandan11@trustkeyper.com'), findsOneWidget);
   });
 
-  testWidgets('Streak counts meditation days only', (tester) async {
+  testWidgets('Streak actions stay compact and summarize sacred activity',
+      (tester) async {
     final now = DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));
     final olderMeditation = now.subtract(const Duration(days: 5));
@@ -586,29 +714,127 @@ void main() {
     await tester.pumpAndSettle();
 
     final current = tester.widget<Text>(
-      find.byKey(const Key('meditation-streak-current')),
+      find.byKey(const Key('sacred-streak-current')),
     );
     final best = tester.widget<Text>(
-      find.byKey(const Key('meditation-streak-best')),
-    );
-    final total = tester.widget<Text>(
-      find.byKey(const Key('meditation-streak-total')),
+      find.byKey(const Key('sacred-streak-longest')),
     );
 
     expect(current.data, '2');
     expect(best.data, '2');
-    expect(total.data, '3');
-    expect(find.text('Continuity of meditation'), findsOneWidget);
-    expect(find.text('Yesterday'), findsOneWidget);
-    expect(
-      find.text(
-          'Every sincere meditation, of any duration, keeps the continuity.'),
-      findsNothing,
+    expect(find.text('Current'), findsOneWidget);
+    expect(find.text('Longest'), findsOneWidget);
+    expect(find.byKey(const Key('sacred-activity-calendar')), findsOneWidget);
+    expect(find.text('Continuity of meditation'), findsNothing);
+    expect(find.text('Yesterday'), findsNothing);
+  });
+
+  testWidgets('Activity calendar shows daily satsang and meditation time',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'english',
+      'guruvandan_flutter:account_created_at': yesterday.millisecondsSinceEpoch,
+      'guruvandan_flutter:routine': jsonEncode({
+        dateKey(today): {
+          'morningSatsang': true,
+          'meditation': true,
+        },
+      }),
+      'guruvandan_flutter:activity': jsonEncode({
+        'morning': {
+          'type': 'satsang_listened',
+          'timestamp':
+              today.add(const Duration(hours: 7)).millisecondsSinceEpoch,
+          'label': 'morning: Astuti',
+          'durationSeconds': 600,
+          'completed': true,
+        },
+        'meditation': {
+          'type': 'meditation_session',
+          'timestamp':
+              today.add(const Duration(hours: 8)).millisecondsSinceEpoch,
+          'durationSeconds': 900,
+          'completed': true,
+        },
+      }),
+    });
+
+    await tester.pumpWidget(
+      const GuruvandanApp(firebaseReady: false, showOpening: false),
     );
-    expect(
-      find.text('Complete all three practices to grow your streak.'),
-      findsNothing,
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enter'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('sacred-activity-calendar')),
     );
+    await tester.tap(find.byKey(const Key('sacred-activity-calendar')));
+    await tester.pumpAndSettle();
+
+    final calendar = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    calendar.onDateChanged(today);
+    await tester.pumpAndSettle();
+
+    final details = find.byType(AlertDialog);
+    expect(
+      find.descendant(of: details, matching: find.text('Morning')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: details, matching: find.text('10m')),
+        findsOneWidget);
+    expect(
+      find.descendant(of: details, matching: find.text('Meditation')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: details, matching: find.text('15m')),
+        findsOneWidget);
+  });
+
+  testWidgets('Hindi streak controls use compact labels and Hindi calendar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final now = DateTime.now();
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'hindi',
+      'guruvandan_flutter:routine': jsonEncode({
+        dateKey(now): {'meditation': true},
+        dateKey(now.subtract(const Duration(days: 1))): {
+          'meditation': true,
+        },
+      }),
+    });
+
+    await tester.pumpWidget(
+      const GuruvandanApp(firebaseReady: false, showOpening: false),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('प्रवेश'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('वर्तमान'), findsOneWidget);
+    expect(find.text('दीर्घतम'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('sacred-streak-current'))).data,
+      '२',
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('sacred-activity-calendar')),
+    );
+    await tester.tap(find.byKey(const Key('sacred-activity-calendar')));
+    await tester.pumpAndSettle();
+
+    final calendarContext = tester.element(find.byType(CalendarDatePicker));
+    expect(Localizations.localeOf(calendarContext).languageCode, 'hi');
   });
 
   testWidgets('Name onboarding saves split profile', (tester) async {

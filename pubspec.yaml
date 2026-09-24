@@ -1,7 +1,7 @@
 name: guruvandan_flutter
 description: A spiritual routine tracker for satsang, meditation, Sadguru quotes, and admin-managed devotional content.
 publish_to: "none"
-version: 1.0.37+40
+version: 1.0.38+41
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -35,8 +35,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/logo.jpg
     - assets/images/app_icon.png
+    - assets/images/chakra_logo.png
     - assets/images/guru_image.jpeg
     - assets/audio/meditation_chant.mp3
     - assets/audio/om_mantra_417hz_loop.mp3

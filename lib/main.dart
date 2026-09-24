@@ -315,8 +315,9 @@ class _AppIconMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/app_icon.png',
+      'assets/images/chakra_logo.png',
       fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
     );
   }
 }
@@ -1344,6 +1345,285 @@ class DevoteeActivityEvent {
       completed: value['completed'] == true,
     );
   }
+
+  Map<String, Object> toJson() => {
+        'type': type,
+        'timestamp': timestamp,
+        if (label.isNotEmpty) 'label': label,
+        if (contentId.isNotEmpty) 'contentId': contentId,
+        if (durationSeconds > 0) 'durationSeconds': durationSeconds,
+        if (plannedDurationSeconds > 0)
+          'plannedDurationSeconds': plannedDurationSeconds,
+        if (completed) 'completed': true,
+      };
+}
+
+List<DevoteeActivityEvent> devoteeActivityEventsFromValue(Object? value) {
+  if (value is! Map) return const [];
+  final events = value.entries
+      .where((entry) => entry.value is Map)
+      .map(
+        (entry) => DevoteeActivityEvent.fromEntry(
+          entry.key.toString(),
+          Map<dynamic, dynamic>.from(entry.value as Map),
+        ),
+      )
+      .where((event) => event.type.isNotEmpty && event.timestamp > 0)
+      .toList()
+    ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  return events;
+}
+
+class SacredDayActivity {
+  SacredDayActivity(this.date);
+
+  final DateTime date;
+  bool morningSatsang = false;
+  bool eveningSatsang = false;
+  bool meditation = false;
+  int morningSatsangSeconds = 0;
+  int eveningSatsangSeconds = 0;
+  int otherSatsangSeconds = 0;
+  int meditationSeconds = 0;
+
+  bool get hasSatsang =>
+      morningSatsang || eveningSatsang || otherSatsangSeconds > 0;
+  bool get hasAny => hasSatsang || meditation;
+  bool get bothSatsangs => morningSatsang && eveningSatsang;
+  int get totalSatsangSeconds =>
+      morningSatsangSeconds + eveningSatsangSeconds + otherSatsangSeconds;
+}
+
+Map<String, SacredDayActivity> sacredActivityHistory({
+  required Map<String, Map<String, bool>> records,
+  required Iterable<DevoteeActivityEvent> events,
+}) {
+  final history = <String, SacredDayActivity>{};
+
+  SacredDayActivity dayFor(DateTime date) {
+    final normalized = _dateOnly(date);
+    final key = DateFormat('yyyy-MM-dd').format(normalized);
+    return history.putIfAbsent(key, () => SacredDayActivity(normalized));
+  }
+
+  for (final entry in records.entries) {
+    final date = DateTime.tryParse(entry.key);
+    if (date == null) continue;
+    final day = dayFor(date);
+    day.morningSatsang = entry.value[RoutineTask.morningSatsang.name] == true;
+    day.eveningSatsang = entry.value[RoutineTask.eveningSatsang.name] == true;
+    day.meditation = entry.value[RoutineTask.meditation.name] == true;
+  }
+
+  for (final event in events) {
+    final day = dayFor(event.occurredAt);
+    if (event.type == 'meditation_session') {
+      day.meditation =
+          day.meditation || event.completed || event.durationSeconds > 0;
+      day.meditationSeconds += event.durationSeconds;
+      continue;
+    }
+    if (event.type != 'satsang_listened') continue;
+    final label = event.label.toLowerCase();
+    if (label.startsWith('morning:')) {
+      day.morningSatsang = true;
+      day.morningSatsangSeconds += event.durationSeconds;
+    } else if (label.startsWith('evening:')) {
+      day.eveningSatsang = true;
+      day.eveningSatsangSeconds += event.durationSeconds;
+    } else {
+      day.otherSatsangSeconds += event.durationSeconds;
+    }
+  }
+
+  return history;
+}
+
+enum SacredStreakKind {
+  fullPractice,
+  satsangAndMeditation,
+  bothSatsangs,
+  meditation,
+  morningSatsang,
+  eveningSatsang,
+}
+
+bool sacredActivityMatchesKind(
+  SacredDayActivity? day,
+  SacredStreakKind kind,
+) {
+  if (day == null) return false;
+  return switch (kind) {
+    SacredStreakKind.fullPractice => day.bothSatsangs && day.meditation,
+    SacredStreakKind.satsangAndMeditation => day.hasSatsang && day.meditation,
+    SacredStreakKind.bothSatsangs => day.bothSatsangs,
+    SacredStreakKind.meditation => day.meditation,
+    SacredStreakKind.morningSatsang => day.morningSatsang,
+    SacredStreakKind.eveningSatsang => day.eveningSatsang,
+  };
+}
+
+int sacredActivityDaysForKind(
+  Map<String, SacredDayActivity> history,
+  SacredStreakKind kind,
+) {
+  return history.values
+      .where((day) => sacredActivityMatchesKind(day, kind))
+      .length;
+}
+
+SacredStreakSummary sacredLongestStreakForKind({
+  required Map<String, SacredDayActivity> history,
+  required DateTime accountCreatedAt,
+  required SacredStreakKind kind,
+  DateTime? now,
+}) {
+  final today = _dateOnly(now ?? DateTime.now());
+  final firstDay = _dateOnly(accountCreatedAt).isAfter(today)
+      ? today
+      : _dateOnly(accountCreatedAt);
+  String keyFor(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
+  var cursor = firstDay;
+  var runLength = 0;
+  var bestLength = 0;
+  DateTime? runStart;
+  DateTime? bestStart;
+  DateTime? bestEnd;
+
+  while (!cursor.isAfter(today)) {
+    if (sacredActivityMatchesKind(history[keyFor(cursor)], kind)) {
+      runStart ??= cursor;
+      runLength++;
+      if (runLength > bestLength) {
+        bestLength = runLength;
+        bestStart = runStart;
+        bestEnd = cursor;
+      }
+    } else {
+      runLength = 0;
+      runStart = null;
+    }
+    cursor = cursor.add(const Duration(days: 1));
+  }
+
+  if (bestLength == 0) return const SacredStreakSummary.empty();
+  return SacredStreakSummary(
+    length: bestLength,
+    kind: kind,
+    start: bestStart,
+    end: bestEnd,
+  );
+}
+
+class SacredStreakSummary {
+  const SacredStreakSummary({
+    required this.length,
+    required this.kind,
+    this.start,
+    this.end,
+  });
+
+  const SacredStreakSummary.empty()
+      : length = 0,
+        kind = SacredStreakKind.meditation,
+        start = null,
+        end = null;
+
+  final int length;
+  final SacredStreakKind kind;
+  final DateTime? start;
+  final DateTime? end;
+}
+
+class SacredStreakOverview {
+  const SacredStreakOverview({required this.current, required this.longest});
+
+  final SacredStreakSummary current;
+  final SacredStreakSummary longest;
+}
+
+SacredStreakOverview sacredStreakOverviewFor({
+  required Map<String, SacredDayActivity> history,
+  required DateTime accountCreatedAt,
+  DateTime? now,
+}) {
+  final today = _dateOnly(now ?? DateTime.now());
+  final firstDay = _dateOnly(accountCreatedAt).isAfter(today)
+      ? today
+      : _dateOnly(accountCreatedAt);
+  final kinds = SacredStreakKind.values;
+  final candidates = <SacredStreakSummary>[];
+  final currentCandidates = <SacredStreakSummary>[];
+  String keyFor(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
+
+  bool matches(SacredStreakKind kind, DateTime date) =>
+      sacredActivityMatchesKind(history[keyFor(date)], kind);
+
+  for (final kind in kinds) {
+    var cursor = firstDay;
+    var runLength = 0;
+    DateTime? runStart;
+    while (!cursor.isAfter(today)) {
+      if (matches(kind, cursor)) {
+        runStart ??= cursor;
+        runLength++;
+      } else if (runLength > 0) {
+        candidates.add(SacredStreakSummary(
+          length: runLength,
+          kind: kind,
+          start: runStart,
+          end: cursor.subtract(const Duration(days: 1)),
+        ));
+        runLength = 0;
+        runStart = null;
+      }
+      cursor = cursor.add(const Duration(days: 1));
+    }
+    if (runLength > 0) {
+      candidates.add(SacredStreakSummary(
+        length: runLength,
+        kind: kind,
+        start: runStart,
+        end: today,
+      ));
+    }
+
+    var currentEnd = today;
+    if (!matches(kind, currentEnd)) {
+      currentEnd = currentEnd.subtract(const Duration(days: 1));
+    }
+    var currentLength = 0;
+    var currentStart = currentEnd;
+    while (!currentStart.isBefore(firstDay) && matches(kind, currentStart)) {
+      currentLength++;
+      currentStart = currentStart.subtract(const Duration(days: 1));
+    }
+    if (currentLength > 1) {
+      currentCandidates.add(SacredStreakSummary(
+        length: currentLength,
+        kind: kind,
+        start: currentStart.add(const Duration(days: 1)),
+        end: currentEnd,
+      ));
+    }
+  }
+
+  int compare(SacredStreakSummary left, SacredStreakSummary right) {
+    final lengthComparison = right.length.compareTo(left.length);
+    if (lengthComparison != 0) return lengthComparison;
+    return left.kind.index.compareTo(right.kind.index);
+  }
+
+  candidates.sort(compare);
+  currentCandidates.sort(compare);
+  return SacredStreakOverview(
+    current: currentCandidates.isEmpty
+        ? const SacredStreakSummary.empty()
+        : currentCandidates.first,
+    longest: candidates.isEmpty
+        ? const SacredStreakSummary.empty()
+        : candidates.first,
+  );
 }
 
 class DevoteeActivity {
@@ -1355,6 +1635,7 @@ class DevoteeActivity {
     required this.records,
     required this.events,
     required this.likedQuoteIds,
+    this.createdAt,
     this.lastActiveAt,
   });
 
@@ -1365,6 +1646,7 @@ class DevoteeActivity {
   final Map<String, Map<String, bool>> records;
   final List<DevoteeActivityEvent> events;
   final Set<String> likedQuoteIds;
+  final int? createdAt;
   final int? lastActiveAt;
 
   factory DevoteeActivity.fromEntry(String uid, Map<dynamic, dynamic> value) {
@@ -1402,6 +1684,9 @@ class DevoteeActivity {
               .map((entry) => entry.key.toString())
               .toSet()
           : <String>{},
+      createdAt: value['createdAt'] is num
+          ? (value['createdAt'] as num).toInt()
+          : int.tryParse('${value['createdAt']}'),
       lastActiveAt:
           value['lastActiveAt'] is int ? value['lastActiveAt'] as int : null,
     );
@@ -1429,6 +1714,27 @@ class DevoteeActivity {
 
   int get quoteLikes => likedQuoteIds.length;
 
+  Map<String, SacredDayActivity> get sacredHistory => sacredActivityHistory(
+        records: records,
+        events: events,
+      );
+
+  DateTime get accountCreatedOn {
+    final candidates = <int>[
+      if (createdAt != null && createdAt! > 0) createdAt!,
+      ...records.keys
+          .map(DateTime.tryParse)
+          .whereType<DateTime>()
+          .map((date) => date.millisecondsSinceEpoch),
+      ...events.map((event) => event.timestamp),
+      if (lastActiveAt != null && lastActiveAt! > 0) lastActiveAt!,
+    ];
+    if (candidates.isEmpty) return _dateOnly(DateTime.now());
+    return _dateOnly(
+      DateTime.fromMillisecondsSinceEpoch(candidates.reduce(min)),
+    );
+  }
+
   bool activeOn(DateTime day) {
     final key = DateFormat('yyyy-MM-dd').format(day);
     if (records[key]?.values.contains(true) == true) return true;
@@ -1443,6 +1749,18 @@ class DevoteeActivity {
           : uid;
 }
 
+List<DevoteeActivity> filterDevoteeActivities(
+  Iterable<DevoteeActivity> users,
+  String query,
+) {
+  final normalized = query.trim().toLowerCase();
+  if (normalized.isEmpty) return users.toList(growable: false);
+  return users
+      .where((user) => [user.name, user.email, user.phone]
+          .any((value) => value.toLowerCase().contains(normalized)))
+      .toList(growable: false);
+}
+
 String formatActivityDuration(int totalSeconds) {
   final safeSeconds = max(0, totalSeconds);
   if (safeSeconds < 60) return '${safeSeconds}s';
@@ -1450,6 +1768,22 @@ String formatActivityDuration(int totalSeconds) {
   final minutes = (safeSeconds % 3600) ~/ 60;
   if (hours == 0) return '${minutes}m';
   return minutes == 0 ? '${hours}h' : '${hours}h ${minutes}m';
+}
+
+String _hindiDigits(String value) {
+  const western = '0123456789';
+  const devanagari = '०१२३४५६७८९';
+  return value.split('').map((character) {
+    final index = western.indexOf(character);
+    return index < 0 ? character : devanagari[index];
+  }).join();
+}
+
+String localizedActivityDuration(BuildContext context, int totalSeconds) {
+  final value = formatActivityDuration(totalSeconds);
+  if (LanguageScope.of(context).language != AppLanguage.hindi) return value;
+  return _hindiDigits(
+      value.replaceAll('h', 'घं').replaceAll('m', 'मि').replaceAll('s', 'से'));
 }
 
 const fallbackSatsangs = [
@@ -1750,26 +2084,21 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
   );
   canvas.drawRRect(header, Paint()..color = const Color(0xFF7B171D));
 
-  final logoData = await rootBundle.load('assets/images/app_icon.png');
+  final logoData = await rootBundle.load('assets/images/chakra_logo.png');
   final codec = await ui.instantiateImageCodec(
     logoData.buffer.asUint8List(),
     targetWidth: 118,
     targetHeight: 118,
   );
   final logoFrame = await codec.getNextFrame();
-  final logoRect = RRect.fromRectAndRadius(
-    const Rect.fromLTWH(1000, 46, 108, 108),
-    const Radius.circular(54),
-  );
-  canvas.save();
-  canvas.clipRRect(logoRect);
+  const logoRect = Rect.fromLTWH(1012, 43, 84, 118);
   paintImage(
     canvas: canvas,
-    rect: logoRect.outerRect,
+    rect: logoRect,
     image: logoFrame.image,
-    fit: BoxFit.cover,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.high,
   );
-  canvas.restore();
 
   void drawText(
     String value,
@@ -2207,9 +2536,39 @@ class _OpeningScreen extends StatelessWidget {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       SizedBox(
-                                        width: iconSize,
-                                        height: iconSize,
-                                        child: const _AppIconMark(),
+                                        width: iconSize * 1.5,
+                                        height: iconSize * 1.18,
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Positioned(
+                                              bottom: 0,
+                                              child: Container(
+                                                width: iconSize * 1.2,
+                                                height: iconSize * 0.34,
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(99),
+                                                  gradient: RadialGradient(
+                                                    colors: [
+                                                      AppColors.softGold
+                                                          .withValues(
+                                                              alpha: 0.58),
+                                                      AppColors.softGold
+                                                          .withValues(alpha: 0),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: iconSize,
+                                              height: iconSize,
+                                              child: const _AppIconMark(),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                       SizedBox(height: logoGap),
                                       Text(
@@ -3103,6 +3462,8 @@ class _DevoteeShellState extends State<DevoteeShell>
   static const routineKey = 'guruvandan_flutter:routine';
   static const nameKey = 'guruvandan_flutter:name';
   static const likedQuotesKey = 'guruvandan_flutter:liked_quotes';
+  static const activityKey = 'guruvandan_flutter:activity';
+  static const accountCreatedAtKey = 'guruvandan_flutter:account_created_at';
 
   late final FirebaseContentService content;
   final List<StreamSubscription<dynamic>> audioSubscriptions = [];
@@ -3114,6 +3475,8 @@ class _DevoteeShellState extends State<DevoteeShell>
   bool needsProfileName = false;
   bool showSignInAfterLogout = false;
   Map<String, Map<String, bool>> records = {};
+  List<DevoteeActivityEvent> activityEvents = [];
+  DateTime accountCreatedAt = _dateOnly(DateTime.now());
   String? activeTrackId;
   RoutineTask? activeTrackTask;
   Duration audioPosition = Duration.zero;
@@ -3283,6 +3646,13 @@ class _DevoteeShellState extends State<DevoteeShell>
       ? likedQuotesKey
       : '$likedQuotesKey:${widget.user!.uid}';
 
+  String get _activityStorageKey =>
+      widget.user == null ? activityKey : '$activityKey:${widget.user!.uid}';
+
+  String get _accountCreatedAtStorageKey => widget.user == null
+      ? accountCreatedAtKey
+      : '$accountCreatedAtKey:${widget.user!.uid}';
+
   String get _meditationPresetsStorageKey => widget.user == null
       ? _meditationPresetsKey
       : '$_meditationPresetsKey:${widget.user!.uid}';
@@ -3306,13 +3676,13 @@ class _DevoteeShellState extends State<DevoteeShell>
     bool completed = false,
   }) async {
     final reference = _cloudUserReference;
-    if (reference == null) return;
-    final key = reference.child('activity').push().key;
-    if (key == null) return;
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final key = reference?.child('activity').push().key ??
+        'local-$timestamp-${activityEvents.length}';
 
     final event = <String, Object>{
       'type': type,
-      'timestamp': ServerValue.timestamp,
+      'timestamp': timestamp,
       if (label.isNotEmpty) 'label': label,
       if (contentId.isNotEmpty) 'contentId': contentId,
       if (durationSeconds > 0) 'durationSeconds': durationSeconds,
@@ -3320,6 +3690,24 @@ class _DevoteeShellState extends State<DevoteeShell>
         'plannedDurationSeconds': plannedDurationSeconds,
       if (completed) 'completed': true,
     };
+
+    final localEvent = DevoteeActivityEvent.fromEntry(key, event);
+    if (mounted) {
+      setState(() {
+        activityEvents = [
+          localEvent,
+          ...activityEvents.where((item) => item.id != key),
+        ];
+      });
+    } else {
+      activityEvents = [
+        localEvent,
+        ...activityEvents.where((item) => item.id != key),
+      ];
+    }
+    await _saveLocalActivityEvents();
+
+    if (reference == null) return;
 
     try {
       await reference.update({
@@ -3500,6 +3888,54 @@ class _DevoteeShellState extends State<DevoteeShell>
     }
   }
 
+  Future<List<DevoteeActivityEvent>> _loadCloudActivityEvents() async {
+    final reference = _cloudUserReference?.child('activity');
+    if (reference == null) return const [];
+    try {
+      final snapshot =
+          await reference.get().timeout(const Duration(seconds: 6));
+      return devoteeActivityEventsFromValue(snapshot.value);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<int?> _loadCloudAccountCreatedAt() async {
+    final reference = _cloudUserReference?.child('createdAt');
+    if (reference == null) return null;
+    try {
+      final snapshot =
+          await reference.get().timeout(const Duration(seconds: 6));
+      final value = snapshot.value;
+      return value is num ? value.toInt() : int.tryParse('$value');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _ensureCloudAccountCreatedAt(int timestamp) async {
+    final reference = _cloudUserReference?.child('createdAt');
+    if (reference == null) return;
+    try {
+      final snapshot =
+          await reference.get().timeout(const Duration(seconds: 6));
+      if (!snapshot.exists) {
+        await reference.set(timestamp).timeout(const Duration(seconds: 6));
+      }
+    } catch (_) {
+      // Firebase Auth and the local timestamp still preserve the start date.
+    }
+  }
+
+  Future<void> _saveLocalActivityEvents() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _activityStorageKey,
+      jsonEncode(
+          {for (final event in activityEvents) event.id: event.toJson()}),
+    );
+  }
+
   Future<void> _saveCloudRecords() async {
     final reference = _cloudUserReference;
     if (reference == null) return;
@@ -3521,6 +3957,17 @@ class _DevoteeShellState extends State<DevoteeShell>
         (widget.user == null ? null : prefs.getString(routineKey));
     final localLikedQuotes =
         prefs.getStringList(_likedQuotesStorageKey) ?? const <String>[];
+    final localActivityValue = prefs.getString(_activityStorageKey);
+    var localActivityEvents = const <DevoteeActivityEvent>[];
+    if (localActivityValue != null) {
+      try {
+        localActivityEvents =
+            devoteeActivityEventsFromValue(jsonDecode(localActivityValue));
+      } catch (_) {
+        localActivityEvents = const [];
+      }
+    }
+    final locallyCreatedAt = prefs.getInt(_accountCreatedAtStorageKey);
     final savedMeditationPresets =
         prefs.getStringList(_meditationPresetsStorageKey) ??
             (widget.user == null
@@ -3569,7 +4016,15 @@ class _DevoteeShellState extends State<DevoteeShell>
 
     final cloudRecords = await _loadCloudRecords();
     final cloudLikedQuotes = await _loadCloudLikedQuotes();
+    final cloudActivityEvents = await _loadCloudActivityEvents();
+    final cloudCreatedAt = await _loadCloudAccountCreatedAt();
     likedQuoteIds = {...cloudLikedQuotes, ...localLikedQuotes};
+    activityEvents = {
+      for (final event in [...cloudActivityEvents, ...localActivityEvents])
+        event.id: event,
+    }.values.toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     records = {...cloudRecords};
     if (savedRecords != null) {
       try {
@@ -3585,6 +4040,27 @@ class _DevoteeShellState extends State<DevoteeShell>
         // Keep any activity restored from Firebase.
       }
     }
+
+    final creationCandidates = <int>[
+      if (locallyCreatedAt != null) locallyCreatedAt,
+      if (cloudCreatedAt != null) cloudCreatedAt,
+      if (widget.user?.metadata.creationTime != null)
+        widget.user!.metadata.creationTime!.millisecondsSinceEpoch,
+      ...records.keys
+          .map(DateTime.tryParse)
+          .whereType<DateTime>()
+          .map((date) => date.millisecondsSinceEpoch),
+      ...activityEvents.map((event) => event.timestamp),
+    ];
+    final resolvedCreatedAt = creationCandidates.isEmpty
+        ? DateTime.now().millisecondsSinceEpoch
+        : creationCandidates.reduce(min);
+    accountCreatedAt = _dateOnly(
+      DateTime.fromMillisecondsSinceEpoch(resolvedCreatedAt),
+    );
+    await prefs.setInt(_accountCreatedAtStorageKey, resolvedCreatedAt);
+    unawaited(_ensureCloudAccountCreatedAt(resolvedCreatedAt));
+    await _saveLocalActivityEvents();
 
     if (widget.user != null && records.isNotEmpty) {
       unawaited(_saveCloudRecords());
@@ -3637,7 +4113,7 @@ class _DevoteeShellState extends State<DevoteeShell>
         context: context,
         barrierDismissible: false,
         barrierLabel: 'Welcome',
-        barrierColor: AppColors.deepCrimson.withValues(alpha: 0.34),
+        barrierColor: Colors.black.withValues(alpha: 0.64),
         transitionDuration: const Duration(milliseconds: 360),
         pageBuilder: (context, animation, secondaryAnimation) {
           return _GuruWelcomeDialog(name: devoteeProfile!.displayName);
@@ -3669,8 +4145,6 @@ class _DevoteeShellState extends State<DevoteeShell>
   String get todayKey => DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   Map<String, bool> get today => records[todayKey] ?? {};
-
-  RoutineStats get stats => routineStatsFromRecords(records);
 
   Future<void> _markTask(RoutineTask task) async {
     setState(() {
@@ -4492,7 +4966,9 @@ class _DevoteeShellState extends State<DevoteeShell>
       PracticeTab.home: _HomeScreen(
         name: devoteeProfile?.displayName ?? appText(context, 'Bhakt', 'भक्त'),
         today: today,
-        stats: stats,
+        records: records,
+        activityEvents: activityEvents,
+        accountCreatedAt: accountCreatedAt,
         onOpenSatsang: (session) {
           setState(() {
             selectedSession = session;
@@ -4773,63 +5249,50 @@ class _GuruWelcomeDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final language = LanguageScope.of(context).language;
+    final dark = Theme.of(context).brightness == Brightness.dark;
 
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 380),
+            constraints: const BoxConstraints(maxWidth: 326),
             child: Material(
-              color: Colors.transparent,
+              color: _raisedSurfaceColor(),
+              elevation: 24,
+              shadowColor: Colors.black.withValues(alpha: 0.48),
+              borderRadius: BorderRadius.circular(26),
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: _raisedSurfaceColor(),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(26),
                   border: Border.all(
-                    color: _borderColor(AppColors.borderStrong),
+                    color: dark
+                        ? AppColors.darkGold.withValues(alpha: 0.55)
+                        : AppColors.gold.withValues(alpha: 0.52),
+                    width: 1.2,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.deepCrimson.withValues(alpha: 0.28),
-                      blurRadius: 38,
-                      offset: const Offset(0, 24),
-                    ),
-                  ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [AppColors.maroon, AppColors.crimson],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Column(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            width: 78,
-                            height: 78,
-                            padding: const EdgeInsets.all(4),
+                            width: 54,
+                            height: 54,
+                            padding: const EdgeInsets.all(3),
                             decoration: BoxDecoration(
-                              color: AppColors.offWhite,
+                              color: _surfaceColor(AppColors.parchment),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                  color: AppColors.softGold, width: 2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.deepCrimson
-                                      .withValues(alpha: 0.32),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
+                                color: _readableColor(AppColors.gold)!,
+                                width: 1.5,
+                              ),
                             ),
                             child: ClipOval(
                               child: Image.asset(
@@ -4839,96 +5302,73 @@ class _GuruWelcomeDialog extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Guru Vandan',
-                            textAlign: TextAlign.center,
-                            style: _headingStyle(
-                              language,
-                              color: AppColors.offWhite,
-                              fontSize: 24,
-                              height: 1.05,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-                      child: Column(
-                        children: [
-                          Text(
-                            appText(
-                              context,
-                              'Jai Guru, $name!',
-                              'जय गुरु, $name!',
-                            ),
-                            textAlign: TextAlign.center,
-                            style: _bodyStyle(
-                              language,
-                              color: AppColors.maroon,
-                              fontSize: 23,
-                              height: 1.18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 34,
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  color: AppColors.softGold,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              const Icon(Icons.format_quote_rounded,
-                                  color: AppColors.rose, size: 30),
-                              const SizedBox(width: 10),
-                              Container(
-                                width: 34,
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  color: AppColors.softGold,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(170, 56),
-                              backgroundColor: _primaryActionColor(),
-                              foregroundColor: _onPrimaryActionColor(),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 26),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              elevation: 8,
-                              shadowColor:
-                                  AppColors.maroon.withValues(alpha: 0.24),
-                              textStyle: _bodyStyle(
-                                language,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                height: 1.15,
-                              ),
-                            ),
+                          const SizedBox(width: 13),
+                          Flexible(
                             child: Text(
-                              appText(context, 'Enter', 'प्रवेश'),
-                              textAlign: TextAlign.center,
+                              'Guru Vandan',
+                              maxLines: 1,
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                              style: _headingStyle(
+                                language,
+                                color: AppColors.ink,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 17),
+                        child: Divider(
+                          height: 1,
+                          color: _borderColor(AppColors.borderStrong),
+                        ),
+                      ),
+                      Text(
+                        appText(
+                          context,
+                          'Jai Guru, $name!',
+                          'जय गुरु, $name!',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: _headingStyle(
+                          language,
+                          color: AppColors.maroon,
+                          fontSize: 22,
+                          height: 1.15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 19),
+                      SizedBox(
+                        width: 136,
+                        height: 44,
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _primaryActionColor(),
+                            foregroundColor: _onPrimaryActionColor(),
+                            padding: const EdgeInsets.symmetric(horizontal: 18),
+                            shape: const StadiumBorder(),
+                            elevation: 3,
+                            shadowColor:
+                                AppColors.maroon.withValues(alpha: 0.32),
+                            textStyle: _bodyStyle(
+                              language,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          child: Text(
+                            appText(context, 'Enter', 'प्रवेश'),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -5180,7 +5620,9 @@ class _HomeScreen extends StatelessWidget {
   const _HomeScreen({
     required this.name,
     required this.today,
-    required this.stats,
+    required this.records,
+    required this.activityEvents,
+    required this.accountCreatedAt,
     required this.onOpenSatsang,
     required this.onOpenMeditation,
     required this.onResetToday,
@@ -5192,7 +5634,9 @@ class _HomeScreen extends StatelessWidget {
 
   final String name;
   final Map<String, bool> today;
-  final RoutineStats stats;
+  final Map<String, Map<String, bool>> records;
+  final List<DevoteeActivityEvent> activityEvents;
+  final DateTime accountCreatedAt;
   final ValueChanged<SatsangSession> onOpenSatsang;
   final VoidCallback onOpenMeditation;
   final VoidCallback onResetToday;
@@ -5263,8 +5707,9 @@ class _HomeScreen extends StatelessWidget {
               onTap: () => onOpenSatsang(SatsangSession.evening),
             ),
             _MeditationStreakPanel(
-              stats: stats,
-              todayDone: today[RoutineTask.meditation.name] == true,
+              records: records,
+              activityEvents: activityEvents,
+              accountCreatedAt: accountCreatedAt,
             ),
             if (dailyQuote != null)
               _WisdomFeature(
@@ -5535,309 +5980,382 @@ class _DawnTemplePainter extends CustomPainter {
 
 class _MeditationStreakPanel extends StatelessWidget {
   const _MeditationStreakPanel({
-    required this.stats,
-    required this.todayDone,
+    required this.records,
+    required this.activityEvents,
+    required this.accountCreatedAt,
   });
 
-  final RoutineStats stats;
-  final bool todayDone;
+  final Map<String, Map<String, bool>> records;
+  final List<DevoteeActivityEvent> activityEvents;
+  final DateTime accountCreatedAt;
 
   @override
   Widget build(BuildContext context) {
-    final language = LanguageScope.of(context).language;
-    final yesterdayDone = todayDone ? stats.current > 1 : stats.current > 0;
-    final showYesterday = stats.total > (todayDone ? 1 : 0);
+    final history = sacredActivityHistory(
+      records: records,
+      events: activityEvents,
+    );
+    final overview = sacredStreakOverviewFor(
+      history: history,
+      accountCreatedAt: accountCreatedAt,
+    );
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: _cardDecoration(color: AppColors.offWhite),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _surfaceColor(AppColors.rose),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.self_improvement_rounded,
-                  color: _readableColor(AppColors.maroon),
-                  size: 29,
+          Expanded(
+            child: _StreakActionButton(
+              valueKey: const Key('sacred-streak-current'),
+              value: overview.current.length,
+              label: appText(context, 'Current', 'वर्तमान'),
+              color: AppColors.maroon,
+              onTap: () => _showStreak(
+                context,
+                overview.current,
+                current: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _StreakActionButton(
+              valueKey: const Key('sacred-streak-longest'),
+              value: overview.longest.length,
+              label: appText(context, 'Longest', 'दीर्घतम'),
+              color: AppColors.sage,
+              onTap: () => _showStreak(
+                context,
+                overview.longest,
+                current: false,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Semantics(
+            button: true,
+            label: appText(context, 'Calendar', 'पंचांग'),
+            child: Material(
+              color: _surfaceColor(AppColors.parchment),
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                key: const Key('sacred-activity-calendar'),
+                onTap: () => _showCalendar(context, history),
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  width: 70,
+                  height: 78,
+                  child: Icon(
+                    Icons.calendar_month_rounded,
+                    color: _readableColor(AppColors.gold),
+                    size: 31,
+                  ),
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  appText(
-                    context,
-                    'Continuity of meditation',
-                    'ध्यान-साधना क्रम',
-                  ),
-                  style: _headingStyle(
-                    language,
-                    color: AppColors.ink,
-                    fontSize: 23,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _StreakContinuity(
-            showYesterday: showYesterday,
-            yesterdayDone: yesterdayDone,
-            todayDone: todayDone,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Divider(height: 1, color: _borderColor(AppColors.border)),
-          ),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(
-                  child: _StreakMetric(
-                    valueKey: const Key('meditation-streak-current'),
-                    value: stats.current,
-                    label: appText(
-                      context,
-                      'Current continuity',
-                      'वर्तमान क्रम',
-                    ),
-                    color: AppColors.maroon,
-                  ),
-                ),
-                VerticalDivider(color: _borderColor(AppColors.border)),
-                Expanded(
-                  child: _StreakMetric(
-                    valueKey: const Key('meditation-streak-best'),
-                    value: stats.best,
-                    label:
-                        appText(context, 'Longest continuity', 'दीर्घतम क्रम'),
-                    color: AppColors.sage,
-                  ),
-                ),
-                VerticalDivider(color: _borderColor(AppColors.border)),
-                Expanded(
-                  child: _StreakMetric(
-                    valueKey: const Key('meditation-streak-total'),
-                    value: stats.total,
-                    label: appText(
-                      context,
-                      'Days of meditation',
-                      'ध्यान-दिवस',
-                    ),
-                    color: AppColors.gold,
-                  ),
-                ),
-              ],
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _StreakContinuity extends StatelessWidget {
-  const _StreakContinuity({
-    required this.showYesterday,
-    required this.yesterdayDone,
-    required this.todayDone,
-  });
-
-  final bool showYesterday;
-  final bool yesterdayDone;
-  final bool todayDone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showYesterday) ...[
-          Expanded(
-            child: _StreakDayStep(
-              label: appText(context, 'Yesterday', 'गत दिवस'),
-              status: yesterdayDone
-                  ? appText(context, 'Meditation complete', 'ध्यान पूर्ण')
-                  : appText(context, 'Not completed', 'अपूर्ण'),
-              icon: yesterdayDone ? Icons.check_rounded : Icons.remove_rounded,
-              active: yesterdayDone,
-            ),
-          ),
-          _StreakConnector(active: yesterdayDone),
-        ],
-        Expanded(
-          child: _StreakDayStep(
-            label: appText(context, 'Today', 'आज'),
-            status: todayDone
-                ? appText(context, 'Complete', 'पूर्ण')
-                : appText(context, 'Meditate', 'ध्यान करें'),
-            icon: todayDone
-                ? Icons.check_rounded
-                : Icons.self_improvement_rounded,
-            active: todayDone,
-            highlighted: true,
-          ),
-        ),
-        _StreakConnector(active: todayDone),
-        Expanded(
-          child: _StreakDayStep(
-            label: appText(context, 'Tomorrow', 'आगामी दिवस'),
-            status: appText(context, 'Keep the rhythm', 'साधना अखंड रखें'),
-            icon: Icons.arrow_forward_rounded,
-            active: false,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StreakConnector extends StatelessWidget {
-  const _StreakConnector({required this.active});
-
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 24,
-      height: 3,
-      margin: const EdgeInsets.only(top: 20),
-      color: active
-          ? _readableColor(AppColors.gold)
-          : _borderColor(AppColors.border),
-    );
-  }
-}
-
-class _StreakDayStep extends StatelessWidget {
-  const _StreakDayStep({
-    required this.label,
-    required this.status,
-    required this.icon,
-    required this.active,
-    this.highlighted = false,
-  });
-
-  final String label;
-  final String status;
-  final IconData icon;
-  final bool active;
-  final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) {
+  Future<void> _showStreak(
+    BuildContext context,
+    SacredStreakSummary streak, {
+    required bool current,
+  }) async {
     final language = LanguageScope.of(context).language;
-    final color = _readableColor(
-      active || highlighted ? AppColors.maroon : AppColors.muted,
-    )!;
-
-    return Column(
-      children: [
-        Container(
-          width: 43,
-          height: 43,
-          decoration: BoxDecoration(
-            color: active
-                ? _primaryActionColor()
-                : highlighted
-                    ? _surfaceColor(AppColors.rose)
-                    : _surfaceColor(AppColors.parchment),
-            shape: BoxShape.circle,
-            border: highlighted && !active
-                ? Border.all(
-                    color: _readableColor(AppColors.maroon)!,
-                    width: 2,
-                  )
-                : null,
-          ),
-          child: Icon(
-            icon,
-            color: active ? _onPrimaryActionColor() : color,
-            size: 23,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          current
+              ? appText(context, 'Current', 'वर्तमान')
+              : appText(context, 'Longest', 'दीर्घतम'),
           textAlign: TextAlign.center,
-          style: _bodyStyle(
-            language,
-            color: AppColors.ink,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          status,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: _bodyStyle(
-            language,
-            color: color,
-            fontSize: 12,
-            height: 1.15,
-            fontWeight: FontWeight.w700,
+        content: streak.length == 0
+            ? Text(
+                appText(context, 'No active streak', 'कोई सक्रिय क्रम नहीं'),
+                textAlign: TextAlign.center,
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    LanguageScope.of(context).language == AppLanguage.hindi
+                        ? '${_hindiDigits('${streak.length}')} दिन'
+                        : '${streak.length} days',
+                    style: _headingStyle(
+                      language,
+                      color: AppColors.maroon,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _streakKindLabel(context, streak.kind),
+                    textAlign: TextAlign.center,
+                    style: _bodyStyle(
+                      language,
+                      color: AppColors.ink,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    _dateRangeLabel(context, streak.start!, streak.end!),
+                    textAlign: TextAlign.center,
+                    style: _bodyStyle(language, color: AppColors.taupe),
+                  ),
+                ],
+              ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(appText(context, 'Done', 'पूर्ण')),
           ),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  Future<void> _showCalendar(
+    BuildContext context,
+    Map<String, SacredDayActivity> history,
+  ) async {
+    final today = _dateOnly(DateTime.now());
+    final firstDate = _dateOnly(accountCreatedAt).isAfter(today)
+        ? today
+        : _dateOnly(accountCreatedAt);
+    final picked = await showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 390),
+          child: CalendarDatePicker(
+            initialDate: today,
+            firstDate: firstDate,
+            lastDate: today,
+            currentDate: today,
+            onDateChanged: (date) => Navigator.pop(dialogContext, date),
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    final key = DateFormat('yyyy-MM-dd').format(picked);
+    await _showDay(context, picked, history[key]);
+  }
+
+  Future<void> _showDay(
+    BuildContext context,
+    DateTime date,
+    SacredDayActivity? activity,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          _dateLabel(context, date),
+          textAlign: TextAlign.center,
+        ),
+        content: activity == null || !activity.hasAny
+            ? Text(
+                appText(
+                  context,
+                  'No sacred activity happened',
+                  'कोई साधना नहीं हुई',
+                ),
+                textAlign: TextAlign.center,
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (activity.morningSatsang)
+                    _ActivityDetailRow(
+                      icon: Icons.wb_sunny_rounded,
+                      label: appText(context, 'Morning', 'प्रातः'),
+                      value: activity.morningSatsangSeconds > 0
+                          ? localizedActivityDuration(
+                              context,
+                              activity.morningSatsangSeconds,
+                            )
+                          : appText(context, 'Done', 'पूर्ण'),
+                    ),
+                  if (activity.eveningSatsang)
+                    _ActivityDetailRow(
+                      icon: Icons.nights_stay_rounded,
+                      label: appText(context, 'Evening', 'सायं'),
+                      value: activity.eveningSatsangSeconds > 0
+                          ? localizedActivityDuration(
+                              context,
+                              activity.eveningSatsangSeconds,
+                            )
+                          : appText(context, 'Done', 'पूर्ण'),
+                    ),
+                  if (activity.otherSatsangSeconds > 0)
+                    _ActivityDetailRow(
+                      icon: Icons.headphones_rounded,
+                      label: appText(context, 'Satsang', 'सत्संग'),
+                      value: localizedActivityDuration(
+                        context,
+                        activity.otherSatsangSeconds,
+                      ),
+                    ),
+                  if (activity.meditation)
+                    _ActivityDetailRow(
+                      icon: Icons.self_improvement_rounded,
+                      label: appText(context, 'Meditation', 'ध्यान'),
+                      value: activity.meditationSeconds > 0
+                          ? localizedActivityDuration(
+                              context,
+                              activity.meditationSeconds,
+                            )
+                          : appText(context, 'Done', 'पूर्ण'),
+                    ),
+                ],
+              ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(appText(context, 'Close', 'बंद')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _streakKindLabel(BuildContext context, SacredStreakKind kind) {
+    return switch (kind) {
+      SacredStreakKind.fullPractice => appText(
+          context, 'Morning + evening + meditation', 'प्रातः + सायं + ध्यान'),
+      SacredStreakKind.satsangAndMeditation =>
+        appText(context, 'Satsang + meditation', 'सत्संग + ध्यान'),
+      SacredStreakKind.bothSatsangs =>
+        appText(context, 'Morning + evening', 'प्रातः + सायं'),
+      SacredStreakKind.meditation => appText(context, 'Meditation', 'ध्यान'),
+      SacredStreakKind.morningSatsang =>
+        appText(context, 'Morning satsang', 'प्रातः सत्संग'),
+      SacredStreakKind.eveningSatsang =>
+        appText(context, 'Evening satsang', 'सायं सत्संग'),
+    };
+  }
+
+  String _dateRangeLabel(
+    BuildContext context,
+    DateTime start,
+    DateTime end,
+  ) {
+    final startLabel = _dateLabel(context, start);
+    final endLabel = _dateLabel(context, end);
+    return startLabel == endLabel ? startLabel : '$startLabel – $endLabel';
+  }
+
+  String _dateLabel(BuildContext context, DateTime date) {
+    final hindi = LanguageScope.of(context).language == AppLanguage.hindi;
+    final value = DateFormat('d MMM y', hindi ? 'hi' : 'en').format(date);
+    return hindi ? _hindiDigits(value) : value;
   }
 }
 
-class _StreakMetric extends StatelessWidget {
-  const _StreakMetric({
+class _StreakActionButton extends StatelessWidget {
+  const _StreakActionButton({
     required this.valueKey,
     required this.value,
     required this.label,
     required this.color,
+    required this.onTap,
   });
 
   final Key valueKey;
   final int value;
   final String label;
   final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final language = LanguageScope.of(context).language;
+    final displayValue =
+        language == AppLanguage.hindi ? _hindiDigits('$value') : '$value';
+    return Material(
+      color: _surfaceColor(AppColors.parchment),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          height: 78,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                displayValue,
+                key: valueKey,
+                style: GoogleFonts.inter(
+                  color: _readableColor(color),
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _bodyStyle(
+                  language,
+                  color: AppColors.ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityDetailRow extends StatelessWidget {
+  const _ActivityDetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 5),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
         children: [
-          Text(
-            value.toString(),
-            key: valueKey,
-            style: GoogleFonts.inter(
-              color: _readableColor(color),
-              fontSize: 29,
-              fontWeight: FontWeight.w900,
+          Icon(icon, size: 20, color: _readableColor(AppColors.maroon)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-          const SizedBox(height: 4),
           Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: _bodyStyle(
-              language,
-              color: AppColors.taupe,
-              fontSize: 12,
-              height: 1.15,
-              fontWeight: FontWeight.w800,
+            value,
+            style: TextStyle(
+              color: _readableColor(AppColors.taupe),
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
@@ -8057,9 +8575,11 @@ class _AdminConsoleState extends State<AdminConsole> {
   final quoteHindi = TextEditingController();
   final authorEnglish = TextEditingController(text: 'Maharshi Mehi Paramhans');
   final authorHindi = TextEditingController(text: 'महर्षि मेंही परमहंस');
+  final userSearch = TextEditingController();
 
   bool busy = false;
   String status = '';
+  String userSearchQuery = '';
 
   @override
   void dispose() {
@@ -8070,6 +8590,7 @@ class _AdminConsoleState extends State<AdminConsole> {
     quoteHindi.dispose();
     authorEnglish.dispose();
     authorHindi.dispose();
+    userSearch.dispose();
     super.dispose();
   }
 
@@ -8630,6 +9151,7 @@ class _AdminConsoleState extends State<AdminConsole> {
         }
 
         final users = snapshot.data ?? const <DevoteeActivity>[];
+        final filteredUsers = filterDevoteeActivities(users, userSearchQuery);
         final now = DateTime.now();
         final activeToday = users.where((user) => user.activeOn(now)).length;
         final satsangSeconds = users.fold<int>(
@@ -8731,6 +9253,8 @@ class _AdminConsoleState extends State<AdminConsole> {
             const SizedBox(height: 12),
             _PracticeTimeChart(users: users),
             const SizedBox(height: 22),
+            _AdminStreakAnalytics(users: users),
+            const SizedBox(height: 22),
             Text(
               appText(context, 'Feature interest', 'सुविधा रुचि'),
               style: TextStyle(
@@ -8752,7 +9276,28 @@ class _AdminConsoleState extends State<AdminConsole> {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('admin-user-search'),
+              controller: userSearch,
+              onChanged: (value) => setState(() => userSearchQuery = value),
+              decoration: _inputDecoration(
+                appText(context, 'Search name or email', 'नाम या ई-पत्र खोजें'),
+              ).copyWith(
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: userSearchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          userSearch.clear();
+                          setState(() => userSearchQuery = '');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: appText(context, 'Clear', 'मिटाएँ'),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (users.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 18),
@@ -8765,8 +9310,21 @@ class _AdminConsoleState extends State<AdminConsole> {
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               )
+            else if (filteredUsers.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  appText(
+                    context,
+                    'No matching user',
+                    'कोई मेल खाता सदस्य नहीं',
+                  ),
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              )
             else
-              for (final user in users) _AdminUserActivityTile(user: user),
+              for (final user in filteredUsers)
+                _AdminUserActivityTile(user: user),
           ],
         );
       },
@@ -8926,6 +9484,288 @@ class _PracticeTimeChart extends StatelessWidget {
           maximum: maximum,
           valueLabel: formatActivityDuration(meditationSeconds),
           color: AppColors.sage,
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminStreakAnalytics extends StatefulWidget {
+  const _AdminStreakAnalytics({required this.users});
+
+  final List<DevoteeActivity> users;
+
+  @override
+  State<_AdminStreakAnalytics> createState() => _AdminStreakAnalyticsState();
+}
+
+class _AdminStreakAnalyticsState extends State<_AdminStreakAnalytics> {
+  SacredStreakKind selectedKind = SacredStreakKind.meditation;
+
+  @override
+  Widget build(BuildContext context) {
+    final points = widget.users
+        .map((user) {
+          final history = user.sacredHistory;
+          final activeDays = sacredActivityDaysForKind(history, selectedKind);
+          final longest = sacredLongestStreakForKind(
+            history: history,
+            accountCreatedAt: user.accountCreatedOn,
+            kind: selectedKind,
+          ).length;
+          return _AdminStreakPoint(
+            user: user,
+            activeDays: activeDays,
+            longest: longest,
+          );
+        })
+        .where((point) => point.activeDays > 0 || point.longest > 0)
+        .toList()
+      ..sort((a, b) {
+        final streakComparison = b.longest.compareTo(a.longest);
+        return streakComparison != 0
+            ? streakComparison
+            : b.activeDays.compareTo(a.activeDays);
+      });
+    final maximum = points.fold<int>(
+      1,
+      (value, point) => max(value, max(point.activeDays, point.longest)),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          appText(context, 'Streak comparison', 'साधना क्रम तुलना'),
+          style: TextStyle(
+            color: _readableColor(AppColors.ink),
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: _raisedSurfaceColor(),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderColor(AppColors.border)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<SacredStreakKind>(
+              key: const Key('admin-streak-aspect'),
+              value: selectedKind,
+              isExpanded: true,
+              borderRadius: BorderRadius.circular(12),
+              items: SacredStreakKind.values
+                  .map(
+                    (kind) => DropdownMenuItem(
+                      value: kind,
+                      child: Text(_adminStreakKindLabel(context, kind)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => selectedKind = value);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            _ChartLegend(
+              color: AppColors.maroon,
+              label: appText(context, 'Days', 'दिवस'),
+            ),
+            const SizedBox(width: 14),
+            _ChartLegend(
+              color: AppColors.sage,
+              label: appText(context, 'Longest', 'दीर्घतम'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (points.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: Text(
+              appText(context, 'No activity yet', 'अभी कोई गतिविधि नहीं'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _readableColor(AppColors.taupe)),
+            ),
+          )
+        else
+          for (final point in points.take(12))
+            _AdminStreakChartRow(point: point, maximum: maximum),
+      ],
+    );
+  }
+
+  String _adminStreakKindLabel(
+    BuildContext context,
+    SacredStreakKind kind,
+  ) {
+    return switch (kind) {
+      SacredStreakKind.fullPractice => appText(
+          context,
+          'Morning + evening + meditation',
+          'प्रातः + सायं + ध्यान',
+        ),
+      SacredStreakKind.satsangAndMeditation =>
+        appText(context, 'Satsang + meditation', 'सत्संग + ध्यान'),
+      SacredStreakKind.bothSatsangs =>
+        appText(context, 'Morning + evening satsang', 'प्रातः + सायं सत्संग'),
+      SacredStreakKind.meditation => appText(context, 'Meditation', 'ध्यान'),
+      SacredStreakKind.morningSatsang =>
+        appText(context, 'Morning satsang', 'प्रातः सत्संग'),
+      SacredStreakKind.eveningSatsang =>
+        appText(context, 'Evening satsang', 'सायं सत्संग'),
+    };
+  }
+}
+
+class _AdminStreakPoint {
+  const _AdminStreakPoint({
+    required this.user,
+    required this.activeDays,
+    required this.longest,
+  });
+
+  final DevoteeActivity user;
+  final int activeDays;
+  final int longest;
+}
+
+class _AdminStreakChartRow extends StatelessWidget {
+  const _AdminStreakChartRow({
+    required this.point,
+    required this.maximum,
+  });
+
+  final _AdminStreakPoint point;
+  final int maximum;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            point.user.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _readableColor(AppColors.ink),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (point.user.email.trim().isNotEmpty)
+            Text(
+              point.user.email,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _readableColor(AppColors.taupe),
+                fontSize: 12,
+              ),
+            ),
+          const SizedBox(height: 6),
+          _AdminComparisonBar(
+            value: point.activeDays,
+            maximum: maximum,
+            color: AppColors.maroon,
+            prefix: appText(context, 'D', 'दि'),
+          ),
+          const SizedBox(height: 5),
+          _AdminComparisonBar(
+            value: point.longest,
+            maximum: maximum,
+            color: AppColors.sage,
+            prefix: appText(context, 'S', 'क्र'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminComparisonBar extends StatelessWidget {
+  const _AdminComparisonBar({
+    required this.value,
+    required this.maximum,
+    required this.color,
+    required this.prefix,
+  });
+
+  final int value;
+  final int maximum;
+  final Color color;
+  final String prefix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              minHeight: 9,
+              value: value / max(1, maximum),
+              color: _readableColor(color),
+              backgroundColor: _surfaceColor(AppColors.rose),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 42,
+          child: Text(
+            '$prefix $value',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: _readableColor(AppColors.ink),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChartLegend extends StatelessWidget {
+  const _ChartLegend({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: _readableColor(color),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: _readableColor(AppColors.taupe),
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ],
     );
@@ -9135,7 +9975,6 @@ class _AdminUserActivityTile extends StatelessWidget {
         .where((entry) => entry.value.values.contains(true))
         .toList()
       ..sort((a, b) => b.key.compareTo(a.key));
-    final stats = user.meditationStats;
 
     return ExpansionTile(
       tilePadding: EdgeInsets.zero,
@@ -9171,10 +10010,6 @@ class _AdminUserActivityTile extends StatelessWidget {
               value: formatActivityDuration(user.meditationSeconds),
             ),
             _ActivityPill(
-              label: appText(context, 'Current streak', 'वर्तमान क्रम'),
-              value: '${stats.current}',
-            ),
-            _ActivityPill(
               label: appText(context, 'Quote views', 'वचन देखे'),
               value: '${user.quoteViews}',
             ),
@@ -9187,6 +10022,12 @@ class _AdminUserActivityTile extends StatelessWidget {
               value: '${user.quoteLikes}',
             ),
           ],
+        ),
+        const SizedBox(height: 14),
+        _MeditationStreakPanel(
+          records: user.records,
+          activityEvents: user.events,
+          accountCreatedAt: user.accountCreatedOn,
         ),
         const SizedBox(height: 16),
         Align(
