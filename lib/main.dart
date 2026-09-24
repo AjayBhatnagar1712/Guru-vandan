@@ -1661,9 +1661,19 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
 }
 
 class FirebaseContentService {
-  FirebaseContentService(this.ready);
+  FirebaseContentService(
+    this.ready, {
+    Future<List<WisdomQuote>> Function()? quoteLoader,
+  }) : _quoteLoader = quoteLoader;
 
   final bool ready;
+  final Future<List<WisdomQuote>> Function()? _quoteLoader;
+  final StreamController<List<WisdomQuote>> _quoteUpdates =
+      StreamController<List<WisdomQuote>>.broadcast();
+  List<WisdomQuote>? _cachedQuotes;
+  Future<List<WisdomQuote>>? _quoteLoad;
+
+  List<WisdomQuote>? get cachedQuotes => _cachedQuotes;
 
   Stream<List<SatsangTrack>> satsangs() {
     return Stream.value(fallbackSatsangs);
@@ -1693,86 +1703,61 @@ class FirebaseContentService {
     );
   }
 
-  Stream<List<WisdomQuote>> _restQuotePollingStream({
-    required bool hasEmittedRemoteQuotes,
-  }) async* {
-    var emittedRemoteQuotes = hasEmittedRemoteQuotes;
-
-    while (true) {
-      await Future<void>.delayed(const Duration(seconds: 45));
-      try {
-        final quotes = await _publicQuotesFromRest();
-        if (quotes.isNotEmpty) {
-          emittedRemoteQuotes = true;
-          yield quotes;
-        }
-      } catch (_) {
-        if (!emittedRemoteQuotes) yield fallbackQuotes;
-      }
+  Stream<List<WisdomQuote>> quotes() async* {
+    final cached = _cachedQuotes;
+    if (cached != null) {
+      yield cached;
+    } else {
+      yield await _loadPublicQuotes();
     }
+    yield* _quoteUpdates.stream;
   }
 
-  Stream<List<WisdomQuote>> quotes() async* {
-    if (!ready) {
-      yield fallbackQuotes;
-      return;
-    }
+  Future<void> refreshQuotes() async {
+    final refreshed = await _loadPublicQuotes(force: true);
+    if (!_quoteUpdates.isClosed) _quoteUpdates.add(refreshed);
+  }
 
-    var emittedRemote = false;
+  Future<List<WisdomQuote>> _loadPublicQuotes({bool force = false}) {
+    if (!force && _cachedQuotes != null) {
+      return Future.value(_cachedQuotes!);
+    }
+    final activeLoad = _quoteLoad;
+    if (activeLoad != null) return activeLoad;
+
+    final load = _fetchPublicQuotes();
+    _quoteLoad = load;
+    return load.then((quotes) {
+      _cachedQuotes = List<WisdomQuote>.unmodifiable(quotes);
+      return _cachedQuotes!;
+    }).whenComplete(() {
+      if (identical(_quoteLoad, load)) _quoteLoad = null;
+    });
+  }
+
+  Future<List<WisdomQuote>> _fetchPublicQuotes() async {
+    final customLoader = _quoteLoader;
+    if (customLoader != null) return customLoader();
+    if (!ready) return fallbackQuotes;
 
     try {
       final restQuotes = await _publicQuotesFromRest();
-      if (restQuotes.isNotEmpty) {
-        emittedRemote = true;
-        yield restQuotes;
-      }
+      if (restQuotes.isNotEmpty) return restQuotes;
     } catch (_) {
-      // Firebase's SDK stream below, or the polling loop, will keep trying.
-    }
-
-    if (!ready) {
-      if (!emittedRemote) yield fallbackQuotes;
-      yield* _restQuotePollingStream(
-        hasEmittedRemoteQuotes: emittedRemote,
-      );
-      return;
+      // The Firebase SDK request below provides the authenticated fallback.
     }
 
     final reference = FirebaseDatabase.instance.ref('quotes');
+    final snapshot = await reference.get().timeout(const Duration(seconds: 8));
+    return _quotesFromValue(
+      snapshot.value,
+      includeInactive: false,
+      includeFallback: false,
+    );
+  }
 
-    try {
-      final snapshot = await reference.get().timeout(
-            const Duration(seconds: 8),
-          );
-      final firstLoad = _quotesFromValue(
-        snapshot.value,
-        includeInactive: false,
-        includeFallback: false,
-      );
-      if (firstLoad.isNotEmpty) {
-        emittedRemote = true;
-        yield firstLoad;
-      }
-
-      await for (final event in reference.onValue) {
-        final liveQuotes = _quotesFromValue(
-          event.snapshot.value,
-          includeInactive: false,
-          includeFallback: false,
-        );
-        if (liveQuotes.isNotEmpty) {
-          emittedRemote = true;
-          yield liveQuotes;
-        } else if (!emittedRemote) {
-          yield fallbackQuotes;
-        }
-      }
-    } catch (_) {
-      if (!emittedRemote) yield fallbackQuotes;
-      yield* _restQuotePollingStream(
-        hasEmittedRemoteQuotes: emittedRemote,
-      );
-    }
+  Future<void> dispose() async {
+    await _quoteUpdates.close();
   }
 
   Stream<List<WisdomQuote>> adminQuotes() async* {
@@ -2851,6 +2836,7 @@ class _DevoteeShellState extends State<DevoteeShell>
     meditationTimer?.cancel();
     unawaited(_finishSatsangActivity());
     unawaited(_recordMeditationActivity(completed: false));
+    unawaited(content.dispose());
     for (final subscription in audioSubscriptions) {
       unawaited(subscription.cancel());
     }
@@ -4129,6 +4115,8 @@ class _DevoteeShellState extends State<DevoteeShell>
       ),
       PracticeTab.wisdom: _WisdomScreen(
         quotesStream: content.quotes(),
+        initialQuotes: content.cachedQuotes,
+        onRefresh: content.refreshQuotes,
         selectedQuoteId: selectedQuoteId,
         onQuoteViewed: _trackQuoteViewed,
         onQuoteShared: _trackQuoteShared,
@@ -6241,6 +6229,8 @@ class _MeditationHaloPainter extends CustomPainter {
 class _WisdomScreen extends StatelessWidget {
   const _WisdomScreen({
     required this.quotesStream,
+    required this.initialQuotes,
+    required this.onRefresh,
     required this.onQuoteViewed,
     required this.onQuoteShared,
     required this.likedQuoteIds,
@@ -6249,6 +6239,8 @@ class _WisdomScreen extends StatelessWidget {
   });
 
   final Stream<List<WisdomQuote>> quotesStream;
+  final List<WisdomQuote>? initialQuotes;
+  final Future<void> Function() onRefresh;
   final ValueChanged<WisdomQuote> onQuoteViewed;
   final ValueChanged<WisdomQuote> onQuoteShared;
   final Set<String> likedQuoteIds;
@@ -6259,10 +6251,25 @@ class _WisdomScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<List<WisdomQuote>>(
       stream: quotesStream,
-      initialData: fallbackQuotes,
+      initialData: initialQuotes,
       builder: (context, snapshot) {
-        final quotes =
-            snapshot.data?.isNotEmpty == true ? snapshot.data! : fallbackQuotes;
+        if (!snapshot.hasData) {
+          return _PageScaffold(
+            onRefresh: onRefresh,
+            children: [
+              _ScreenTitle(
+                icon: Icons.format_quote_rounded,
+                title: appText(context, 'Guru Vani', 'गुरु वाणी'),
+              ),
+              if (snapshot.hasError)
+                _WisdomLoadErrorCard(onRetry: onRefresh)
+              else
+                const _WisdomLoadingCard(),
+            ],
+          );
+        }
+
+        final quotes = snapshot.data!;
         final timeline = quoteTimelineForDate(quotes);
         final dailyQuote = timeline.daily;
         final selectedQuote = selectedQuoteId == null
@@ -6280,6 +6287,7 @@ class _WisdomScreen extends StatelessWidget {
         }
 
         return _PageScaffold(
+          onRefresh: onRefresh,
           children: [
             _ScreenTitle(
               icon: Icons.format_quote_rounded,
@@ -6450,6 +6458,42 @@ class _WisdomLoadingCard extends StatelessWidget {
               ),
               style: Theme.of(context).textTheme.bodyLarge,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WisdomLoadErrorCard extends StatelessWidget {
+  const _WisdomLoadErrorCard({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: _cardDecoration(color: AppColors.offWhite),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_off_rounded,
+              color: AppColors.maroon, size: 34),
+          const SizedBox(height: 12),
+          Text(
+            appText(
+              context,
+              'Quotes could not be loaded. Pull down or try again.',
+              'वचन लोड नहीं हो सके। नीचे खींचें या पुनः प्रयास करें।',
+            ),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => unawaited(onRetry()),
+            icon: const Icon(Icons.refresh_rounded),
+            label: Text(appText(context, 'Try again', 'पुनः प्रयास')),
           ),
         ],
       ),
@@ -7284,6 +7328,7 @@ class _AdminConsoleState extends State<AdminConsole> {
 
   @override
   void dispose() {
+    unawaited(widget.content.dispose());
     email.dispose();
     password.dispose();
     quoteEnglish.dispose();
@@ -8795,15 +8840,18 @@ class _PageScaffold extends StatelessWidget {
   const _PageScaffold({
     required this.children,
     this.maxWidth = 720,
+    this.onRefresh,
   });
 
   final List<Widget> children;
   final double maxWidth;
+  final Future<void> Function()? onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
+    final scrollView = CustomScrollView(
       key: ValueKey(children.first.runtimeType),
+      physics: onRefresh == null ? null : const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 110),
@@ -8825,6 +8873,14 @@ class _PageScaffold extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    final refresh = onRefresh;
+    if (refresh == null) return scrollView;
+    return RefreshIndicator(
+      onRefresh: refresh,
+      color: AppColors.maroon,
+      child: scrollView,
     );
   }
 }

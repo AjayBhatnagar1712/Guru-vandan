@@ -91,6 +91,40 @@ void main() {
     expect(quotes.last.text, 'Sacred quote 1');
   });
 
+  test('Quote service caches once per session and refreshes only on request',
+      () async {
+    var loadCount = 0;
+    final remoteQuotes = List.generate(
+      11,
+      (index) => WisdomQuote(
+        id: 'remote-$index',
+        text: 'Remote quote $index',
+        createdAt: index,
+      ),
+    );
+    final service = FirebaseContentService(
+      true,
+      quoteLoader: () async {
+        loadCount++;
+        return remoteQuotes;
+      },
+    );
+    addTearDown(service.dispose);
+
+    final firstVisit = await service.quotes().first;
+    final secondVisit = await service.quotes().first;
+
+    expect(firstVisit, hasLength(11));
+    expect(secondVisit, hasLength(11));
+    expect(loadCount, 1);
+
+    await service.refreshQuotes();
+    final afterRefresh = await service.quotes().first;
+
+    expect(afterRefresh, hasLength(11));
+    expect(loadCount, 2);
+  });
+
   test('Quote queue advances one quote per calendar day', () {
     const quotes = [
       WisdomQuote(id: 'oldest', text: 'First', createdAt: 1),
@@ -495,6 +529,7 @@ void main() {
     }
     expect(find.text('Quote of the Day'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
   });
 
   testWidgets('More tab switches app language to Hindi', (tester) async {
