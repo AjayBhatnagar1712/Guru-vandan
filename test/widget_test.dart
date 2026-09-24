@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,12 +40,12 @@ void main() {
     expect(find.text('अपने साधना-पथ की भाषा चुनें'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('हिन्दी'), findsOneWidget);
-    expect(find.text('Welcome to Guruvandan'), findsNothing);
+    expect(find.text('Welcome to Guru Vandan'), findsNothing);
 
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Guruvandan'), findsOneWidget);
+    expect(find.text('Welcome to Guru Vandan'), findsOneWidget);
     expect(find.text('First name'), findsOneWidget);
     expect(find.text('Middle name'), findsOneWidget);
     expect(find.text('Last name'), findsOneWidget);
@@ -291,7 +292,7 @@ void main() {
     expect(formatActivityDuration(3900), '1h 5m');
   });
 
-  testWidgets('Guruvandan home renders with first name', (tester) async {
+  testWidgets('Guru Vandan home renders with first name', (tester) async {
     SharedPreferences.setMockInitialValues({
       'guruvandan_flutter:name': 'Ajay Bhatnagar',
       'guruvandan_flutter:language': 'english',
@@ -301,7 +302,7 @@ void main() {
         const GuruvandanApp(firebaseReady: false, showOpening: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('Guruvandan'), findsWidgets);
+    expect(find.text('Guru Vandan'), findsWidgets);
     expect(find.text('Jai Guru, Ajay!'), findsOneWidget);
     expect(find.textContaining('Ajay'), findsWidgets);
     expect(find.textContaining('Bhatnagar'), findsNothing);
@@ -319,9 +320,9 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await pumpSavedHome(tester);
 
-    const heading = 'MAHARSHI MEHI PARAMHANS';
+    const heading = 'ABOUT GURU MAHARAJ';
     const introduction =
-        'Maharshi Mehi Paramhans was a revered saint of Santmat. His teachings guide seekers toward inner meditation, satsang, compassion, and a life rooted in truth.';
+        'Sadguru Maharshi Mehi Paramhans was one of the most respected saints and spiritual masters of the Sant Mat tradition in India. Born in Bihar, he dedicated his life to spreading the message of inner meditation, self-realization, universal love, and peace. He emphasized the practice of Surat Shabd Yoga and taught that true spirituality lies beyond caste, religion, and social divisions.\n\nThrough his profound writings, discourses, and compassionate guidance, he inspired millions of devotees to walk the path of devotion, simplicity, morality, and spiritual awakening. His teachings continue to guide seekers toward inner harmony and realization of the Divine within every soul.';
 
     await tester.ensureVisible(find.text(heading));
     await tester.pumpAndSettle();
@@ -334,6 +335,14 @@ void main() {
     await tester.tap(find.text(heading));
     await tester.pumpAndSettle();
     expect(find.text(introduction), findsNothing);
+
+    const guruVandanHeading = 'ABOUT GURU VANDAN';
+    const guruVandanIntroduction =
+        'A sacred space for daily spiritual practice — satsang, meditation, Sadguru\'s wisdom and community of devotees, all in one place. Jai Guru.';
+    await tester.ensureVisible(find.text(guruVandanHeading));
+    await tester.tap(find.text(guruVandanHeading));
+    await tester.pumpAndSettle();
+    expect(find.text(guruVandanIntroduction), findsOneWidget);
   });
 
   testWidgets('Admin route opens the dedicated email and password entrance',
@@ -435,7 +444,7 @@ void main() {
         const GuruvandanApp(firebaseReady: false, showOpening: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Guruvandan'), findsNothing);
+    expect(find.text('Welcome to Guru Vandan'), findsNothing);
     expect(find.text('First name'), findsNothing);
     expect(find.text('Today\'s Sacred Practice'), findsOneWidget);
   });
@@ -571,7 +580,7 @@ void main() {
     await tester.tap(confirmLogout);
     await tester.pumpAndSettle();
 
-    expect(find.text('Enter Guruvandan'), findsOneWidget);
+    expect(find.text('Enter Guru Vandan'), findsOneWidget);
     final preferences = await SharedPreferences.getInstance();
     final savedProfile = DevoteeProfile.fromStoredValue(
       preferences.getString('guruvandan_flutter:name'),
@@ -619,6 +628,44 @@ void main() {
         tester.widget<NavigationBar>(find.byType(NavigationBar));
     final labelColor = navigationBar.labelTextStyle?.resolve({})?.color;
     expect(labelColor, const Color(0xFFFFF7EE));
+  });
+
+  testWidgets('Custom meditation timer follows the dark theme', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'english',
+      'guruvandan_flutter:theme_mode': 'dark',
+    });
+
+    await tester.pumpWidget(
+        const GuruvandanApp(firebaseReady: false, showOpening: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Enter'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Meditation').first);
+    await tester.pumpAndSettle();
+
+    final customChip = find.widgetWithText(ChoiceChip, 'Custom');
+    expect(customChip, findsOneWidget);
+    expect(
+      tester.widget<ChoiceChip>(customChip).backgroundColor,
+      const Color(0xFF43282D),
+    );
+    await tester.tap(customChip);
+    await tester.pumpAndSettle();
+
+    final pickerTheme = tester.widget<CupertinoTheme>(
+      find
+          .ancestor(
+            of: find.byType(CupertinoTimerPicker),
+            matching: find.byType(CupertinoTheme),
+          )
+          .first,
+    );
+    expect(pickerTheme.data.brightness, Brightness.dark);
+    expect(pickerTheme.data.primaryColor, const Color(0xFFE2BC73));
   });
 
   testWidgets('Meditation start asks user to put phone on silent',

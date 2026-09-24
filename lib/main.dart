@@ -130,7 +130,7 @@ Future<void> _configureBackgroundAudio() async {
   try {
     await JustAudioBackground.init(
       androidNotificationChannelId: 'com.ivar.guruvandan.audio',
-      androidNotificationChannelName: 'Guruvandan playback',
+      androidNotificationChannelName: 'Guru Vandan playback',
       androidNotificationChannelDescription:
           'Satsang, meditation, and Om mantra playback controls',
       androidNotificationOngoing: true,
@@ -292,9 +292,15 @@ class AppColors {
   static const darkCanvas = Color(0xFF15100F);
   static const darkSurface = Color(0xFF211918);
   static const darkSurfaceRaised = Color(0xFF2B211F);
+  static const darkSurfaceSoft = Color(0xFF372A2D);
+  static const darkRose = Color(0xFF43282D);
   static const darkBorder = Color(0xFF4C3933);
   static const darkInk = Color(0xFFFFF7EE);
   static const darkTaupe = Color(0xFFD6C5BB);
+  static const darkRoseAccent = Color(0xFFE59A9E);
+  static const darkGold = Color(0xFFE2BC73);
+  static const darkSage = Color(0xFF9FC3A6);
+  static const darkRiver = Color(0xFF9BC0CC);
 }
 
 class _AppIconMark extends StatelessWidget {
@@ -327,8 +333,15 @@ bool get _appIsDark => _activeAppBrightness == Brightness.dark;
 
 Color _surfaceColor([Color light = AppColors.surface]) {
   if (!_appIsDark) return light;
+  if (light == AppColors.rose) return AppColors.darkRose;
+  if (light == AppColors.parchment || light == AppColors.cream) {
+    return AppColors.darkSurfaceRaised;
+  }
   if (light.computeLuminance() > 0.72) return AppColors.darkSurface;
-  return Color.alphaBlend(light.withValues(alpha: 0.18), AppColors.darkSurface);
+  return Color.alphaBlend(
+    light.withValues(alpha: 0.1),
+    AppColors.darkSurfaceRaised,
+  );
 }
 
 Color _raisedSurfaceColor([Color light = AppColors.offWhite]) {
@@ -338,7 +351,13 @@ Color _raisedSurfaceColor([Color light = AppColors.offWhite]) {
 
 Color _borderColor([Color light = AppColors.border]) {
   if (!_appIsDark) return light;
-  return AppColors.darkBorder;
+  if (light == AppColors.border || light == AppColors.borderStrong) {
+    return AppColors.darkBorder;
+  }
+  return Color.alphaBlend(
+    light.withValues(alpha: 0.42),
+    AppColors.darkBorder,
+  );
 }
 
 Color? _readableColor(Color? color) {
@@ -347,9 +366,27 @@ Color? _readableColor(Color? color) {
   if (color == AppColors.taupe || color == AppColors.muted) {
     return AppColors.darkTaupe;
   }
+  if (color == AppColors.maroon ||
+      color == AppColors.crimson ||
+      color == AppColors.deepCrimson) {
+    return AppColors.darkRoseAccent;
+  }
+  if (color == AppColors.gold ||
+      color == AppColors.softGold ||
+      color == AppColors.copper) {
+    return AppColors.darkGold;
+  }
+  if (color == AppColors.sage) return AppColors.darkSage;
+  if (color == AppColors.river) return AppColors.darkRiver;
   if (color == Colors.black) return AppColors.darkInk;
   return color;
 }
+
+Color _primaryActionColor() =>
+    _appIsDark ? AppColors.darkGold : AppColors.maroon;
+
+Color _onPrimaryActionColor() =>
+    _appIsDark ? AppColors.darkCanvas : AppColors.cream;
 
 ThemeData _buildAppTheme(AppLanguage language, Brightness brightness) {
   final isDark = brightness == Brightness.dark;
@@ -361,15 +398,20 @@ ThemeData _buildAppTheme(AppLanguage language, Brightness brightness) {
   final foregroundColor = isDark ? AppColors.darkInk : AppColors.ink;
   final bodyColor = isDark ? AppColors.darkTaupe : AppColors.taupe;
   final borderColor = isDark ? AppColors.darkBorder : AppColors.borderStrong;
+  final primaryColor = isDark ? AppColors.darkGold : AppColors.maroon;
 
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.maroon,
-      primary: isDark ? AppColors.softGold : AppColors.maroon,
-      secondary: AppColors.gold,
+      primary: primaryColor,
+      onPrimary: isDark ? AppColors.darkCanvas : AppColors.cream,
+      secondary: isDark ? AppColors.darkRoseAccent : AppColors.gold,
+      onSecondary: isDark ? AppColors.darkCanvas : AppColors.ink,
       surface: surfaceColor,
+      onSurface: foregroundColor,
+      outline: borderColor,
       brightness: brightness,
     ),
     scaffoldBackgroundColor: backgroundColor,
@@ -387,6 +429,11 @@ ThemeData _buildAppTheme(AppLanguage language, Brightness brightness) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        backgroundColor: primaryColor,
+        foregroundColor: isDark ? AppColors.darkCanvas : AppColors.cream,
+        disabledBackgroundColor:
+            isDark ? AppColors.darkSurfaceSoft : AppColors.border,
+        disabledForegroundColor: isDark ? AppColors.darkTaupe : AppColors.muted,
         minimumSize: const Size(56, 56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: _bodyStyle(
@@ -398,6 +445,7 @@ ThemeData _buildAppTheme(AppLanguage language, Brightness brightness) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
+        foregroundColor: isDark ? AppColors.darkGold : AppColors.maroon,
         minimumSize: const Size(56, 54),
         side: BorderSide(color: borderColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -407,6 +455,107 @@ ThemeData _buildAppTheme(AppLanguage language, Brightness brightness) {
           fontWeight: FontWeight.w800,
         ),
       ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor:
+          isDark ? AppColors.darkSurfaceRaised : AppColors.offWhite,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: _headingStyle(
+        language,
+        color: foregroundColor,
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+      ),
+      contentTextStyle: _bodyStyle(
+        language,
+        color: bodyColor,
+        fontSize: 16,
+        height: 1.42,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor:
+          isDark ? AppColors.darkSurfaceRaised : AppColors.offWhite,
+      modalBackgroundColor:
+          isDark ? AppColors.darkSurfaceRaised : AppColors.offWhite,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        side: BorderSide(color: borderColor),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: isDark ? AppColors.darkSurfaceRaised : AppColors.offWhite,
+      labelStyle: TextStyle(color: bodyColor),
+      hintStyle: TextStyle(color: bodyColor),
+      prefixIconColor: isDark ? AppColors.darkGold : AppColors.maroon,
+      suffixIconColor: isDark ? AppColors.darkGold : AppColors.maroon,
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: primaryColor, width: 1.5),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: isDark ? AppColors.darkRose : AppColors.rose,
+      selectedColor: primaryColor,
+      disabledColor: isDark ? AppColors.darkSurfaceSoft : AppColors.border,
+      labelStyle: TextStyle(color: foregroundColor),
+      secondaryLabelStyle: TextStyle(
+        color: isDark ? AppColors.darkCanvas : AppColors.cream,
+      ),
+      side: BorderSide(color: borderColor),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor:
+          isDark ? AppColors.darkSurfaceRaised : AppColors.offWhite,
+      indicatorColor: isDark ? AppColors.darkRose : AppColors.rose,
+      iconTheme: WidgetStateProperty.resolveWith((states) {
+        return IconThemeData(
+          color:
+              states.contains(WidgetState.selected) ? primaryColor : bodyColor,
+        );
+      }),
+      labelTextStyle: WidgetStateProperty.resolveWith((states) {
+        return TextStyle(
+          color:
+              states.contains(WidgetState.selected) ? primaryColor : bodyColor,
+          fontWeight: FontWeight.w800,
+        );
+      }),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor:
+          isDark ? AppColors.darkSurfaceSoft : AppColors.deepCrimson,
+      contentTextStyle: TextStyle(
+        color: isDark ? AppColors.darkInk : AppColors.cream,
+      ),
+      actionTextColor: isDark ? AppColors.darkGold : AppColors.softGold,
+    ),
+    iconTheme: IconThemeData(
+      color: isDark ? AppColors.darkTaupe : AppColors.taupe,
+    ),
+    dividerTheme: DividerThemeData(color: borderColor),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return primaryColor;
+        return isDark ? AppColors.darkTaupe : AppColors.muted;
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return isDark ? AppColors.darkRose : AppColors.softGold;
+        }
+        return isDark ? AppColors.darkSurfaceSoft : AppColors.border;
+      }),
     ),
     textTheme: textTheme.copyWith(
       displayLarge: _headingStyle(
@@ -458,14 +607,14 @@ class _LanguageLoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(child: _SacredBackground()),
+          const Positioned.fill(child: _SacredBackground()),
           Center(
             child: CircularProgressIndicator(
-              color: AppColors.maroon,
-              backgroundColor: AppColors.rose,
+              color: _primaryActionColor(),
+              backgroundColor: _surfaceColor(AppColors.rose),
             ),
           ),
         ],
@@ -506,7 +655,7 @@ class _FirstLaunchLanguageScreen extends StatelessWidget {
                         'Choose the language of your journey',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.lora(
-                          color: AppColors.ink,
+                          color: _readableColor(AppColors.ink),
                           fontSize: 31,
                           fontWeight: FontWeight.w800,
                           height: 1.12,
@@ -517,7 +666,7 @@ class _FirstLaunchLanguageScreen extends StatelessWidget {
                         'अपने साधना-पथ की भाषा चुनें',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.notoSerifDevanagari(
-                          color: AppColors.maroon,
+                          color: _readableColor(AppColors.maroon),
                           fontSize: 27,
                           fontWeight: FontWeight.w800,
                           height: 1.35,
@@ -565,21 +714,21 @@ class _LanguageChoiceButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final titleStyle = hindi
         ? GoogleFonts.notoSansDevanagari(
-            color: AppColors.ink,
+            color: _readableColor(AppColors.ink),
             fontSize: 19,
             fontWeight: FontWeight.w800,
           )
         : GoogleFonts.inter(
-            color: AppColors.ink,
+            color: _readableColor(AppColors.ink),
             fontSize: 18,
             fontWeight: FontWeight.w800,
           );
 
     return Material(
-      color: AppColors.offWhite,
+      color: _raisedSurfaceColor(),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppColors.borderStrong),
+        side: BorderSide(color: _borderColor(AppColors.borderStrong)),
       ),
       child: InkWell(
         onTap: onTap,
@@ -595,19 +744,19 @@ class _LanguageChoiceButton extends StatelessWidget {
                   height: 48,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.rose,
+                    color: _surfaceColor(AppColors.rose),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     iconText,
                     style: hindi
                         ? GoogleFonts.notoSerifDevanagari(
-                            color: AppColors.maroon,
+                            color: _readableColor(AppColors.maroon),
                             fontSize: 24,
                             fontWeight: FontWeight.w900,
                           )
                         : GoogleFonts.lora(
-                            color: AppColors.maroon,
+                            color: _readableColor(AppColors.maroon),
                             fontSize: 23,
                             fontWeight: FontWeight.w900,
                           ),
@@ -617,9 +766,9 @@ class _LanguageChoiceButton extends StatelessWidget {
                 Expanded(
                   child: Text(title, style: titleStyle),
                 ),
-                const Icon(
+                Icon(
                   Icons.arrow_forward_rounded,
-                  color: AppColors.maroon,
+                  color: _readableColor(AppColors.maroon),
                   size: 26,
                 ),
               ],
@@ -1638,7 +1787,7 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
     maxLines: 1,
   );
   drawText(
-    'guruvandan',
+    'Guru Vandan',
     const Rect.fromLTWH(860, 524, 260, 36),
     const TextStyle(
       color: Color(0xFF6D5D55),
@@ -1938,8 +2087,9 @@ class _OpeningScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.cream,
+      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.cream,
       body: AnimatedBuilder(
         animation: progress,
         builder: (context, _) {
@@ -1947,7 +2097,9 @@ class _OpeningScreen extends StatelessWidget {
           return Stack(
             fit: StackFit.expand,
             children: [
-              CustomPaint(painter: _OpeningScenePainter(eased)),
+              CustomPaint(
+                painter: _OpeningScenePainter(eased, isDark: isDark),
+              ),
               SafeArea(
                 child: Center(
                   child: ConstrainedBox(
@@ -1968,10 +2120,12 @@ class _OpeningScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 28),
                               Text(
-                                'Guruvandan',
+                                'Guru Vandan',
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.lora(
-                                  color: AppColors.deepCrimson,
+                                  color: isDark
+                                      ? AppColors.darkInk
+                                      : AppColors.deepCrimson,
                                   fontSize: 42,
                                   height: 1.05,
                                   fontWeight: FontWeight.w900,
@@ -2001,8 +2155,9 @@ class _OpeningScreen extends StatelessWidget {
                                   child: LinearProgressIndicator(
                                     value: progress.value,
                                     minHeight: 7,
-                                    color: AppColors.maroon,
-                                    backgroundColor: AppColors.rose,
+                                    color: _primaryActionColor(),
+                                    backgroundColor:
+                                        _surfaceColor(AppColors.rose),
                                   ),
                                 ),
                               ),
@@ -2023,22 +2178,29 @@ class _OpeningScreen extends StatelessWidget {
 }
 
 class _OpeningScenePainter extends CustomPainter {
-  _OpeningScenePainter(this.progress);
+  _OpeningScenePainter(this.progress, {required this.isDark});
 
   final double progress;
+  final bool isDark;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final sky = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFFFFFBF4),
-          Color(0xFFF6E1C6),
-          Color(0xFFEAB78C),
-        ],
+        colors: isDark
+            ? const [
+                AppColors.darkCanvas,
+                AppColors.darkSurface,
+                AppColors.darkRose,
+              ]
+            : const [
+                Color(0xFFFFFBF4),
+                Color(0xFFF6E1C6),
+                Color(0xFFEAB78C),
+              ],
       ).createShader(rect);
     canvas.drawRect(rect, sky);
 
@@ -2049,7 +2211,9 @@ class _OpeningScenePainter extends CustomPainter {
     canvas.drawCircle(
         Offset(size.width * 0.5, sunY), size.width * 0.23, sunPaint);
 
-    final horizon = Paint()..color = AppColors.maroon.withValues(alpha: 0.08);
+    final horizon = Paint()
+      ..color = (isDark ? AppColors.darkGold : AppColors.maroon)
+          .withValues(alpha: isDark ? 0.06 : 0.08);
     final hill = Path()
       ..moveTo(0, size.height * 0.72)
       ..quadraticBezierTo(size.width * 0.25, size.height * 0.61,
@@ -2062,7 +2226,8 @@ class _OpeningScenePainter extends CustomPainter {
     canvas.drawPath(hill, horizon);
 
     final foreground = Paint()
-      ..color = AppColors.deepCrimson.withValues(alpha: 0.9);
+      ..color = (isDark ? AppColors.darkRose : AppColors.deepCrimson)
+          .withValues(alpha: 0.9);
     final baseY = size.height * 0.82;
     final templeWidth = min(size.width * 0.48, 230.0);
     final templeLeft = (size.width - templeWidth) / 2;
@@ -2124,7 +2289,7 @@ class _OpeningScenePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _OpeningScenePainter oldDelegate) {
-    return oldDelegate.progress != progress;
+    return oldDelegate.progress != progress || oldDelegate.isDark != isDark;
   }
 }
 
@@ -2365,9 +2530,9 @@ class _SignInScreenState extends State<_SignInScreen> {
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
-            icon: const Icon(
+            icon: Icon(
               Icons.link_rounded,
-              color: AppColors.maroon,
+              color: _readableColor(AppColors.maroon),
               size: 34,
             ),
             title: Text(
@@ -2382,7 +2547,7 @@ class _SignInScreenState extends State<_SignInScreen> {
               appText(
                 context,
                 'A Guru Vandan account already uses $email. Continue with $existingProvider to verify that account and securely link both sign-in methods. Your profile and routine data will remain in one account.',
-                '$email से एक गुरुवंदन सदस्यता पहले से जुड़ी है। उस सदस्यता को प्रमाणित करने और दोनों प्रवेश-विधियों को सुरक्षित रूप से जोड़ने के लिए $existingProvider से आगे बढ़ें। आपका परिचय और साधना-विवरण एक ही सदस्यता में रहेगा।',
+                '$email से एक गुरु वंदन सदस्यता पहले से जुड़ी है। उस सदस्यता को प्रमाणित करने और दोनों प्रवेश-विधियों को सुरक्षित रूप से जोड़ने के लिए $existingProvider से आगे बढ़ें। आपका परिचय और साधना-विवरण एक ही सदस्यता में रहेगा।',
               ),
               textAlign: TextAlign.center,
             ),
@@ -2607,8 +2772,8 @@ class _SignInScreenState extends State<_SignInScreen> {
                         Text(
                           appText(
                             context,
-                            'Enter Guruvandan',
-                            'गुरुवंदन में प्रवेश करें',
+                            'Enter Guru Vandan',
+                            'गुरु वंदन में प्रवेश करें',
                           ),
                           textAlign: TextAlign.center,
                           style: _headingStyle(
@@ -2631,7 +2796,8 @@ class _SignInScreenState extends State<_SignInScreen> {
                           )),
                           style: FilledButton.styleFrom(
                             minimumSize: const Size.fromHeight(58),
-                            backgroundColor: AppColors.maroon,
+                            backgroundColor: _primaryActionColor(),
+                            foregroundColor: _onPrimaryActionColor(),
                           ),
                         ),
                         if (_appleSignInAvailable) ...[
@@ -2660,7 +2826,7 @@ class _SignInScreenState extends State<_SignInScreen> {
                                   appText(
                                       context, 'or use phone', 'अथवा दूरभाष'),
                                   style: TextStyle(
-                                    color: AppColors.taupe,
+                                    color: _readableColor(AppColors.taupe),
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
@@ -3302,7 +3468,7 @@ class _DevoteeShellState extends State<DevoteeShell>
   }) {
     return MediaItem(
       id: id,
-      album: 'Guruvandan',
+      album: 'Guru Vandan',
       title: title,
       artist: description,
       duration: duration,
@@ -4176,8 +4342,8 @@ class _ProfileLoadingScreen extends StatelessWidget {
         height: 58,
         child: CircularProgressIndicator(
           strokeWidth: 5,
-          color: AppColors.maroon,
-          backgroundColor: AppColors.rose,
+          color: _primaryActionColor(),
+          backgroundColor: _surfaceColor(AppColors.rose),
         ),
       ),
     );
@@ -4256,8 +4422,8 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                 Text(
                   appText(
                     context,
-                    'Welcome to Guruvandan',
-                    'गुरुवंदन में हार्दिक अभिनंदन',
+                    'Welcome to Guru Vandan',
+                    'गुरु वंदन में हार्दिक अभिनंदन',
                   ),
                   textAlign: TextAlign.center,
                   style: _headingStyle(
@@ -4316,7 +4482,8 @@ class _NameOnboardingScreenState extends State<_NameOnboardingScreen> {
                   ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(58),
-                    backgroundColor: AppColors.maroon,
+                    backgroundColor: _primaryActionColor(),
+                    foregroundColor: _onPrimaryActionColor(),
                   ),
                 ),
               ],
@@ -4348,9 +4515,11 @@ class _GuruWelcomeDialog extends StatelessWidget {
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: AppColors.offWhite,
+                  color: _raisedSurfaceColor(),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.borderStrong),
+                  border: Border.all(
+                    color: _borderColor(AppColors.borderStrong),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.deepCrimson.withValues(alpha: 0.28),
@@ -4402,7 +4571,7 @@ class _GuruWelcomeDialog extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Guruvandan',
+                            'Guru Vandan',
                             textAlign: TextAlign.center,
                             style: _headingStyle(
                               language,
@@ -4465,8 +4634,8 @@ class _GuruWelcomeDialog extends StatelessWidget {
                             onPressed: () => Navigator.of(context).pop(),
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(170, 56),
-                              backgroundColor: AppColors.maroon,
-                              foregroundColor: AppColors.offWhite,
+                              backgroundColor: _primaryActionColor(),
+                              foregroundColor: _onPrimaryActionColor(),
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 26),
                               shape: RoundedRectangleBorder(
@@ -4519,9 +4688,11 @@ class _GuruWelcomeDialogLegacy extends StatelessWidget {
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: AppColors.offWhite,
+                  color: _raisedSurfaceColor(),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.borderStrong),
+                  border: Border.all(
+                    color: _borderColor(AppColors.borderStrong),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.deepCrimson.withValues(alpha: 0.28),
@@ -4592,8 +4763,8 @@ class _GuruWelcomeDialogLegacy extends StatelessWidget {
                           Text(
                             'जय गुरु, $name!',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: AppColors.maroon,
+                            style: TextStyle(
+                              color: _readableColor(AppColors.maroon),
                               fontSize: 23,
                               height: 1.18,
                               fontWeight: FontWeight.w900,
@@ -4630,8 +4801,8 @@ class _GuruWelcomeDialogLegacy extends StatelessWidget {
                             onPressed: () => Navigator.of(context).pop(),
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(170, 56),
-                              backgroundColor: AppColors.maroon,
-                              foregroundColor: AppColors.offWhite,
+                              backgroundColor: _primaryActionColor(),
+                              foregroundColor: _onPrimaryActionColor(),
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 26),
                               shape: RoundedRectangleBorder(
@@ -4674,22 +4845,22 @@ class _SilentPhoneDialog extends StatelessWidget {
     return PopScope(
       canPop: false,
       child: AlertDialog(
-        backgroundColor: AppColors.offWhite,
-        surfaceTintColor: AppColors.offWhite,
+        backgroundColor: _raisedSurfaceColor(),
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: AppColors.borderStrong),
+          side: BorderSide(color: _borderColor(AppColors.borderStrong)),
         ),
         icon: Container(
           width: 58,
           height: 58,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.rose,
+            color: _surfaceColor(AppColors.rose),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.notifications_paused_rounded,
-            color: AppColors.maroon,
+            color: _readableColor(AppColors.maroon),
             size: 31,
           ),
         ),
@@ -4724,8 +4895,8 @@ class _SilentPhoneDialog extends StatelessWidget {
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(54),
-              backgroundColor: AppColors.maroon,
-              foregroundColor: AppColors.offWhite,
+              backgroundColor: _primaryActionColor(),
+              foregroundColor: _onPrimaryActionColor(),
             ),
             child: Text(appText(context, 'Continue', 'स्वीकार')),
           ),
@@ -4908,7 +5079,7 @@ class _HeroPanel extends StatelessWidget {
                             color: AppColors.softGold.withValues(alpha: 0.58)),
                       ),
                       child: Text(
-                        'Guruvandan',
+                        'Guru Vandan',
                         style: GoogleFonts.inter(
                           color: AppColors.softGold,
                           fontSize: 15,
@@ -5119,12 +5290,12 @@ class _MeditationStreakPanel extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppColors.rose,
+                  color: _surfaceColor(AppColors.rose),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.self_improvement_rounded,
-                  color: AppColors.maroon,
+                  color: _readableColor(AppColors.maroon),
                   size: 29,
                 ),
               ),
@@ -5152,9 +5323,9 @@ class _MeditationStreakPanel extends StatelessWidget {
             yesterdayDone: yesterdayDone,
             todayDone: todayDone,
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 18),
-            child: Divider(height: 1, color: AppColors.border),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: _borderColor(AppColors.border)),
           ),
           IntrinsicHeight(
             child: Row(
@@ -5171,7 +5342,7 @@ class _MeditationStreakPanel extends StatelessWidget {
                     color: AppColors.maroon,
                   ),
                 ),
-                const VerticalDivider(color: AppColors.border),
+                VerticalDivider(color: _borderColor(AppColors.border)),
                 Expanded(
                   child: _StreakMetric(
                     valueKey: const Key('meditation-streak-best'),
@@ -5181,7 +5352,7 @@ class _MeditationStreakPanel extends StatelessWidget {
                     color: AppColors.sage,
                   ),
                 ),
-                const VerticalDivider(color: AppColors.border),
+                VerticalDivider(color: _borderColor(AppColors.border)),
                 Expanded(
                   child: _StreakMetric(
                     valueKey: const Key('meditation-streak-total'),
@@ -5270,7 +5441,9 @@ class _StreakConnector extends StatelessWidget {
       width: 24,
       height: 3,
       margin: const EdgeInsets.only(top: 20),
-      color: active ? AppColors.gold : AppColors.border,
+      color: active
+          ? _readableColor(AppColors.gold)
+          : _borderColor(AppColors.border),
     );
   }
 }
@@ -5293,7 +5466,9 @@ class _StreakDayStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final language = LanguageScope.of(context).language;
-    final color = active || highlighted ? AppColors.maroon : AppColors.muted;
+    final color = _readableColor(
+      active || highlighted ? AppColors.maroon : AppColors.muted,
+    )!;
 
     return Column(
       children: [
@@ -5302,18 +5477,21 @@ class _StreakDayStep extends StatelessWidget {
           height: 43,
           decoration: BoxDecoration(
             color: active
-                ? AppColors.maroon
+                ? _primaryActionColor()
                 : highlighted
-                    ? AppColors.rose
-                    : AppColors.parchment,
+                    ? _surfaceColor(AppColors.rose)
+                    : _surfaceColor(AppColors.parchment),
             shape: BoxShape.circle,
             border: highlighted && !active
-                ? Border.all(color: AppColors.maroon, width: 2)
+                ? Border.all(
+                    color: _readableColor(AppColors.maroon)!,
+                    width: 2,
+                  )
                 : null,
           ),
           child: Icon(
             icon,
-            color: active ? AppColors.offWhite : color,
+            color: active ? _onPrimaryActionColor() : color,
             size: 23,
           ),
         ),
@@ -5373,7 +5551,7 @@ class _StreakMetric extends StatelessWidget {
             value.toString(),
             key: valueKey,
             style: GoogleFonts.inter(
-              color: color,
+              color: _readableColor(color),
               fontSize: 29,
               fontWeight: FontWeight.w900,
             ),
@@ -5497,9 +5675,9 @@ class _SessionSwitch extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: AppColors.offWhite,
+        color: _raisedSurfaceColor(),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.borderStrong),
+        border: Border.all(color: _borderColor(AppColors.borderStrong)),
       ),
       child: Row(
         children: SatsangSession.values.map((session) {
@@ -5513,7 +5691,7 @@ class _SessionSwitch extends StatelessWidget {
                 height: 56,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: active ? AppColors.maroon : Colors.transparent,
+                  color: active ? _primaryActionColor() : Colors.transparent,
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Row(
@@ -5522,13 +5700,17 @@ class _SessionSwitch extends StatelessWidget {
                     Icon(
                       _satsangSessionIcon(session),
                       size: 22,
-                      color: active ? AppColors.cream : AppColors.maroon,
+                      color: active
+                          ? _onPrimaryActionColor()
+                          : _readableColor(AppColors.maroon),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       _satsangSessionLabel(context, session),
                       style: TextStyle(
-                        color: active ? AppColors.cream : AppColors.maroon,
+                        color: active
+                            ? _onPrimaryActionColor()
+                            : _readableColor(AppColors.maroon),
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
                       ),
@@ -5587,12 +5769,16 @@ class _AudioCard extends StatelessWidget {
                 width: 54,
                 height: 54,
                 decoration: BoxDecoration(
-                  color: active ? AppColors.maroon : AppColors.rose,
+                  color: active
+                      ? _primaryActionColor()
+                      : _surfaceColor(AppColors.rose),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   _satsangSessionIcon(track.session),
-                  color: active ? AppColors.cream : AppColors.maroon,
+                  color: active
+                      ? _onPrimaryActionColor()
+                      : _readableColor(AppColors.maroon),
                   size: 29,
                 ),
               ),
@@ -5603,8 +5789,8 @@ class _AudioCard extends StatelessWidget {
                   children: [
                     Text(
                       _satsangSessionEyebrow(context, track.session),
-                      style: const TextStyle(
-                        color: AppColors.gold,
+                      style: TextStyle(
+                        color: _readableColor(AppColors.gold),
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
                       ),
@@ -5621,10 +5807,10 @@ class _AudioCard extends StatelessWidget {
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 7,
-              activeTrackColor: AppColors.gold,
-              inactiveTrackColor: AppColors.rose,
-              thumbColor: AppColors.maroon,
-              overlayColor: AppColors.maroon.withValues(alpha: 0.12),
+              activeTrackColor: _readableColor(AppColors.gold),
+              inactiveTrackColor: _surfaceColor(AppColors.rose),
+              thumbColor: _primaryActionColor(),
+              overlayColor: _primaryActionColor().withValues(alpha: 0.12),
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
             ),
@@ -5641,8 +5827,8 @@ class _AudioCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '$position / $duration',
-                  style: const TextStyle(
-                    color: AppColors.taupe,
+                  style: TextStyle(
+                    color: _readableColor(AppColors.taupe),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -5660,8 +5846,10 @@ class _AudioCard extends StatelessWidget {
                   label: Text(playing
                       ? appText(context, 'Pause', 'विराम')
                       : appText(context, 'Play', 'श्रवण')),
-                  style:
-                      FilledButton.styleFrom(backgroundColor: AppColors.maroon),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _primaryActionColor(),
+                    foregroundColor: _onPrimaryActionColor(),
+                  ),
                 ),
               ),
               if (onMark != null) ...[
@@ -5676,7 +5864,9 @@ class _AudioCard extends StatelessWidget {
                         ? appText(context, 'Done', 'पूर्ण')
                         : appText(context, 'Mark', 'अंकित')),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: done ? AppColors.sage : AppColors.maroon,
+                      foregroundColor: _readableColor(
+                        done ? AppColors.sage : AppColors.maroon,
+                      ),
                     ),
                   ),
                 ),
@@ -5768,8 +5958,8 @@ class _MeditationScreen extends StatelessWidget {
                       child: CircularProgressIndicator(
                         value: progress.clamp(0, 1),
                         strokeWidth: 14,
-                        color: AppColors.gold,
-                        backgroundColor: AppColors.rose,
+                        color: _readableColor(AppColors.gold),
+                        backgroundColor: _surfaceColor(AppColors.rose),
                         strokeCap: StrokeCap.round,
                       ),
                     ),
@@ -5778,13 +5968,23 @@ class _MeditationScreen extends StatelessWidget {
                       height: 198,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFFFFFF), Color(0xFFF8EAD7)],
+                        gradient: LinearGradient(
+                          colors: _appIsDark
+                              ? const [
+                                  AppColors.darkSurfaceRaised,
+                                  AppColors.darkRose,
+                                ]
+                              : const [
+                                  Color(0xFFFFFFFF),
+                                  Color(0xFFF8EAD7),
+                                ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        border:
-                            Border.all(color: AppColors.softGold, width: 1.5),
+                        border: Border.all(
+                          color: _borderColor(AppColors.softGold),
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.maroon.withValues(alpha: 0.12),
@@ -5804,7 +6004,7 @@ class _MeditationScreen extends StatelessWidget {
                                 _formatSeconds(remainingSeconds),
                                 maxLines: 1,
                                 style: GoogleFonts.inter(
-                                  color: AppColors.maroon,
+                                  color: _readableColor(AppColors.maroon),
                                   fontSize: 46,
                                   fontWeight: FontWeight.w900,
                                 ),
@@ -5813,8 +6013,8 @@ class _MeditationScreen extends StatelessWidget {
                           ),
                           Text(
                             statusLabel,
-                            style: const TextStyle(
-                              color: AppColors.taupe,
+                            style: TextStyle(
+                              color: _readableColor(AppColors.taupe),
                               fontWeight: FontWeight.w900,
                             ),
                           ),
@@ -5843,10 +6043,12 @@ class _MeditationScreen extends StatelessWidget {
                       onSelected: locked
                           ? null
                           : (_) => onPresetMinutesChanged(minutes),
-                      selectedColor: AppColors.maroon,
-                      backgroundColor: AppColors.rose,
+                      selectedColor: _primaryActionColor(),
+                      backgroundColor: _surfaceColor(AppColors.rose),
                       labelStyle: TextStyle(
-                        color: active ? AppColors.cream : AppColors.maroon,
+                        color: active
+                            ? _onPrimaryActionColor()
+                            : _readableColor(AppColors.maroon),
                         fontWeight: FontWeight.w900,
                       ),
                       shape: RoundedRectangleBorder(
@@ -5860,8 +6062,8 @@ class _MeditationScreen extends StatelessWidget {
                       Icons.schedule_rounded,
                       size: 18,
                       color: customDurationSelected
-                          ? AppColors.cream
-                          : AppColors.maroon,
+                          ? _onPrimaryActionColor()
+                          : _readableColor(AppColors.maroon),
                     ),
                     label: Text(customDurationSelected
                         ? _formatDurationLabel(
@@ -5869,12 +6071,12 @@ class _MeditationScreen extends StatelessWidget {
                         : appText(context, 'Custom', 'स्वनिर्धारित')),
                     selected: customDurationSelected,
                     onSelected: locked ? null : (_) => onCustomDuration(),
-                    selectedColor: AppColors.maroon,
-                    backgroundColor: AppColors.rose,
+                    selectedColor: _primaryActionColor(),
+                    backgroundColor: _surfaceColor(AppColors.rose),
                     labelStyle: TextStyle(
                       color: customDurationSelected
-                          ? AppColors.cream
-                          : AppColors.maroon,
+                          ? _onPrimaryActionColor()
+                          : _readableColor(AppColors.maroon),
                       fontWeight: FontWeight.w900,
                     ),
                     shape: RoundedRectangleBorder(
@@ -5905,8 +6107,11 @@ class _MeditationScreen extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(58),
                         backgroundColor: meditationRunning
-                            ? AppColors.crimson
-                            : AppColors.maroon,
+                            ? (_appIsDark
+                                ? AppColors.darkRoseAccent
+                                : AppColors.crimson)
+                            : _primaryActionColor(),
+                        foregroundColor: _onPrimaryActionColor(),
                         textStyle: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w900),
                       ),
@@ -5981,16 +6186,20 @@ class _MantraLoopSwitch extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: enabled
-                  ? AppColors.gold.withValues(alpha: 0.16)
-                  : AppColors.rose,
+                  ? _readableColor(AppColors.gold)!.withValues(alpha: 0.16)
+                  : _surfaceColor(AppColors.rose),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: enabled ? AppColors.softGold : AppColors.border,
+                color: _borderColor(
+                  enabled ? AppColors.softGold : AppColors.border,
+                ),
               ),
             ),
             child: Icon(
               enabled ? Icons.spatial_audio_rounded : Icons.music_note_rounded,
-              color: enabled ? AppColors.gold : AppColors.maroon,
+              color: _readableColor(
+                enabled ? AppColors.gold : AppColors.maroon,
+              ),
               size: 27,
             ),
           ),
@@ -6008,8 +6217,9 @@ class _MantraLoopSwitch extends StatelessWidget {
           Switch.adaptive(
             value: enabled,
             onChanged: locked ? null : onChanged,
-            activeThumbColor: AppColors.maroon,
-            activeTrackColor: AppColors.softGold,
+            activeThumbColor: _primaryActionColor(),
+            activeTrackColor:
+                _appIsDark ? AppColors.darkRose : AppColors.softGold,
           ),
         ],
       ),
@@ -6032,6 +6242,9 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? AppColors.darkGold : AppColors.maroon;
+    final onAccent = isDark ? AppColors.darkCanvas : AppColors.cream;
 
     return Material(
       color: Colors.transparent,
@@ -6043,10 +6256,12 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(22, 18, 22, 18 + bottomPadding),
             decoration: BoxDecoration(
-              color: AppColors.offWhite,
+              color: isDark ? AppColors.darkSurfaceRaised : AppColors.offWhite,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(8)),
-              border: Border.all(color: AppColors.borderStrong),
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : AppColors.borderStrong,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.deepCrimson.withValues(alpha: 0.16),
@@ -6065,8 +6280,9 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                     children: [
                       _IconBadge(
                         icon: Icons.schedule_rounded,
-                        background: AppColors.rose,
-                        color: AppColors.maroon,
+                        background:
+                            isDark ? AppColors.darkRose : AppColors.rose,
+                        color: accent,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -6097,21 +6313,24 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color: AppColors.rose.withValues(alpha: 0.56),
+                      color: isDark
+                          ? AppColors.darkRose
+                          : AppColors.rose.withValues(alpha: 0.56),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(
+                        color: isDark ? AppColors.darkBorder : AppColors.border,
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.self_improvement_rounded,
-                            color: AppColors.maroon),
+                        Icon(Icons.self_improvement_rounded, color: accent),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             _formatDurationLabel(context, duration),
                             style: _bodyStyle(
                               LanguageScope.of(context).language,
-                              color: AppColors.maroon,
+                              color: accent,
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
                             ),
@@ -6125,12 +6344,12 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                     height: 216,
                     child: CupertinoTheme(
                       data: CupertinoThemeData(
-                        brightness: Brightness.light,
-                        primaryColor: AppColors.maroon,
+                        brightness: isDark ? Brightness.dark : Brightness.light,
+                        primaryColor: accent,
                         textTheme: CupertinoTextThemeData(
                           pickerTextStyle: _bodyStyle(
                             LanguageScope.of(context).language,
-                            color: AppColors.ink,
+                            color: isDark ? AppColors.darkInk : AppColors.ink,
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
                           ),
@@ -6164,7 +6383,8 @@ class _CustomDurationSheetState extends State<_CustomDurationSheet> {
                           icon: const Icon(Icons.check_rounded),
                           label: Text(appText(context, 'Set', 'निर्धारित')),
                           style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.maroon,
+                            backgroundColor: accent,
+                            foregroundColor: onAccent,
                           ),
                         ),
                       ),
@@ -6340,7 +6560,10 @@ class _EmptyDailyQuote extends StatelessWidget {
       decoration: _cardDecoration(color: AppColors.offWhite),
       child: Row(
         children: [
-          const Icon(Icons.event_busy_rounded, color: AppColors.gold),
+          Icon(
+            Icons.event_busy_rounded,
+            color: _readableColor(AppColors.gold),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -6400,13 +6623,13 @@ class _QuoteArchiveSection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.rose,
+                color: _surfaceColor(AppColors.rose),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 '${quotes.length}',
-                style: const TextStyle(
-                  color: AppColors.maroon,
+                style: TextStyle(
+                  color: _readableColor(AppColors.maroon),
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -6477,8 +6700,11 @@ class _WisdomLoadErrorCard extends StatelessWidget {
       decoration: _cardDecoration(color: AppColors.offWhite),
       child: Column(
         children: [
-          const Icon(Icons.cloud_off_rounded,
-              color: AppColors.maroon, size: 34),
+          Icon(
+            Icons.cloud_off_rounded,
+            color: _readableColor(AppColors.maroon),
+            size: 34,
+          ),
           const SizedBox(height: 12),
           Text(
             appText(
@@ -6533,10 +6759,13 @@ class _WisdomQuoteCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColors.rose,
+              color: _surfaceColor(AppColors.rose),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.spa_rounded, color: AppColors.maroon),
+            child: Icon(
+              Icons.spa_rounded,
+              color: _readableColor(AppColors.maroon),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -6556,8 +6785,8 @@ class _WisdomQuoteCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   quote.author,
-                  style: const TextStyle(
-                    color: AppColors.maroon,
+                  style: TextStyle(
+                    color: _readableColor(AppColors.maroon),
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -6618,9 +6847,10 @@ class _WisdomShareButton extends StatelessWidget {
         fixedSize: const Size(42, 42),
         minimumSize: const Size(42, 42),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor:
-            prominent ? Colors.white.withValues(alpha: 0.82) : AppColors.rose,
-        foregroundColor: AppColors.maroon,
+        backgroundColor: prominent && !_appIsDark
+            ? Colors.white.withValues(alpha: 0.82)
+            : _surfaceColor(AppColors.rose),
+        foregroundColor: _readableColor(AppColors.maroon),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
@@ -6654,9 +6884,12 @@ class _WisdomLikeButton extends StatelessWidget {
         fixedSize: const Size(42, 42),
         minimumSize: const Size(42, 42),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor:
-            prominent ? Colors.white.withValues(alpha: 0.82) : AppColors.rose,
-        foregroundColor: liked ? AppColors.crimson : AppColors.maroon,
+        backgroundColor: prominent && !_appIsDark
+            ? Colors.white.withValues(alpha: 0.82)
+            : _surfaceColor(AppColors.rose),
+        foregroundColor: _readableColor(
+          liked ? AppColors.crimson : AppColors.maroon,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
@@ -6693,9 +6926,9 @@ class _MoreScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(
+        icon: Icon(
           Icons.logout_rounded,
-          color: AppColors.maroon,
+          color: _readableColor(AppColors.maroon),
           size: 34,
         ),
         title: Text(
@@ -6705,8 +6938,8 @@ class _MoreScreen extends StatelessWidget {
         content: Text(
           appText(
             context,
-            'You will return to the Guruvandan entrance.',
-            'आप गुरुवंदन के प्रवेश-पृष्ठ पर लौटेंगे।',
+            'You will return to the Guru Vandan entrance.',
+            'आप गुरु वंदन के प्रवेश-पृष्ठ पर लौटेंगे।',
           ),
           textAlign: TextAlign.center,
         ),
@@ -6750,7 +6983,7 @@ class _MoreScreen extends StatelessWidget {
           appText(
             context,
             'This permanently deletes your Guru Vandan account, profile, routine history, and app sign-in access from this device and Firebase. Linked Apple or Google authorization will be revoked where available. This cannot be undone.',
-            'यह आपकी गुरुवंदन सदस्यता, परिचय, साधना-इतिहास और ऐप प्रवेश को इस उपकरण तथा Firebase से स्थायी रूप से मिटा देगा। उपलब्ध होने पर संबद्ध Apple अथवा Google अनुमति भी निरस्त की जाएगी। इसे वापस नहीं किया जा सकता।',
+            'यह आपकी गुरु वंदन सदस्यता, परिचय, साधना-इतिहास और ऐप प्रवेश को इस उपकरण तथा Firebase से स्थायी रूप से मिटा देगा। उपलब्ध होने पर संबद्ध Apple अथवा Google अनुमति भी निरस्त की जाएगी। इसे वापस नहीं किया जा सकता।',
           ),
           textAlign: TextAlign.center,
         ),
@@ -6839,7 +7072,7 @@ class _MoreScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 22),
                     Text(
-                      'Guruvandan',
+                      'Guru Vandan',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
@@ -6890,8 +7123,8 @@ class _MoreScreen extends StatelessWidget {
                 label: Text(appText(context, 'Name', 'नाम')),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(58),
-                  foregroundColor: AppColors.maroon,
-                  backgroundColor: AppColors.offWhite,
+                  foregroundColor: _readableColor(AppColors.maroon),
+                  backgroundColor: _raisedSurfaceColor(),
                 ),
               ),
               FilledButton.icon(
@@ -6902,7 +7135,8 @@ class _MoreScreen extends StatelessWidget {
                 label: Text(appText(context, 'Logout', 'प्रस्थान')),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(58),
-                  backgroundColor: AppColors.maroon,
+                  backgroundColor: _primaryActionColor(),
+                  foregroundColor: _onPrimaryActionColor(),
                 ),
               ),
               if (user != null) ...[
@@ -6932,7 +7166,7 @@ class _MoreScreen extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(58),
                     foregroundColor: const Color(0xFFB3261E),
-                    backgroundColor: AppColors.offWhite,
+                    backgroundColor: _raisedSurfaceColor(),
                     side: const BorderSide(color: Color(0xFFB3261E)),
                   ),
                 ),
@@ -6996,8 +7230,11 @@ class _EditNameDialogState extends State<_EditNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      icon: const Icon(Icons.manage_accounts_rounded,
-          color: AppColors.maroon, size: 34),
+      icon: Icon(
+        Icons.manage_accounts_rounded,
+        color: _readableColor(AppColors.maroon),
+        size: 34,
+      ),
       title: Text(
         appText(context, 'Change your name', 'अपना नाम बदलें'),
         textAlign: TextAlign.center,
@@ -7153,8 +7390,9 @@ class _AppearanceSettingsCard extends StatelessWidget {
             onChanged: (value) {
               appearance.onChanged(value ? ThemeMode.dark : ThemeMode.light);
             },
-            activeThumbColor: AppColors.gold,
-            activeTrackColor: AppColors.maroon,
+            activeThumbColor: _primaryActionColor(),
+            activeTrackColor:
+                _appIsDark ? AppColors.darkRose : AppColors.maroon,
           ),
         ],
       ),
@@ -7227,6 +7465,7 @@ class _ComingSoonModuleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayAccent = _readableColor(accentColor)!;
     return Container(
       constraints: const BoxConstraints(minHeight: 132),
       padding: const EdgeInsets.all(18),
@@ -7236,7 +7475,7 @@ class _ComingSoonModuleCard extends StatelessWidget {
       ).copyWith(
         boxShadow: [
           BoxShadow(
-            color: accentColor.withValues(alpha: 0.09),
+            color: displayAccent.withValues(alpha: 0.09),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -7251,26 +7490,26 @@ class _ComingSoonModuleCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.12),
+                  color: displayAccent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                   border:
-                      Border.all(color: accentColor.withValues(alpha: 0.22)),
+                      Border.all(color: displayAccent.withValues(alpha: 0.22)),
                 ),
-                child: Icon(icon, color: accentColor, size: 26),
+                child: Icon(icon, color: displayAccent, size: 26),
               ),
               const Spacer(),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppColors.rose,
+                  color: _surfaceColor(AppColors.rose),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: _borderColor(AppColors.border)),
                 ),
                 child: Text(
                   appText(context, 'Coming soon', 'शीघ्र उपलब्ध'),
                   style: TextStyle(
-                    color: AppColors.maroon,
+                    color: _readableColor(AppColors.maroon),
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                   ),
@@ -7423,7 +7662,10 @@ class _AdminConsoleState extends State<AdminConsole> {
       builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
-            const Icon(Icons.edit_note_rounded, color: AppColors.maroon),
+            Icon(
+              Icons.edit_note_rounded,
+              color: _readableColor(AppColors.maroon),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(appText(
@@ -7567,12 +7809,12 @@ class _AdminConsoleState extends State<AdminConsole> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.cream,
+      backgroundColor: _appIsDark ? AppColors.darkCanvas : AppColors.cream,
       appBar: AppBar(
         title: Text(appText(
           context,
-          'Guruvandan Admin',
-          'गुरुवंदन प्रशासक',
+          'Guru Vandan Admin',
+          'गुरु वंदन प्रशासक',
         )),
         actions: [
           IconButton(
@@ -7650,8 +7892,8 @@ class _AdminConsoleState extends State<AdminConsole> {
                           Text(
                             appText(
                               context,
-                              'This account is not authorized for the Guruvandan admin portal.',
-                              'यह खाता गुरुवंदन प्रशासन-पटल के लिए अधिकृत नहीं है।',
+                              'This account is not authorized for the Guru Vandan admin portal.',
+                              'यह खाता गुरु वंदन प्रशासन-पटल के लिए अधिकृत नहीं है।',
                             ),
                             style: Theme.of(context).textTheme.bodyLarge,
                           ),
@@ -7769,7 +8011,9 @@ class _AdminConsoleState extends State<AdminConsole> {
                   'Quotes could not be loaded. Check the Firebase database rules.',
                   'वचन प्राप्त नहीं हो सके। Firebase डेटा-संग्रह के नियम जाँचें।',
                 ),
-                style: const TextStyle(color: AppColors.crimson),
+                style: TextStyle(
+                  color: _readableColor(AppColors.crimson),
+                ),
               ),
             ],
           );
@@ -7819,13 +8063,13 @@ class _AdminConsoleState extends State<AdminConsole> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
-                    color: AppColors.parchment,
+                    color: _surfaceColor(AppColors.parchment),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '${quotes.length}',
-                    style: const TextStyle(
-                      color: AppColors.maroon,
+                    style: TextStyle(
+                      color: _readableColor(AppColors.maroon),
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -7880,7 +8124,9 @@ class _AdminConsoleState extends State<AdminConsole> {
                   'User activity could not be loaded. Check the Firebase database rules.',
                   'सदस्य-साधना विवरण प्राप्त नहीं हो सका। Firebase नियमों की जाँच करें।',
                 ),
-                style: const TextStyle(color: AppColors.crimson),
+                style: TextStyle(
+                  color: _readableColor(AppColors.crimson),
+                ),
               ),
             ],
           );
@@ -7968,8 +8214,8 @@ class _AdminConsoleState extends State<AdminConsole> {
                 'Active devotees in the last seven days',
                 'गत सात दिवसों के सक्रिय सदस्य',
               ),
-              style: const TextStyle(
-                color: AppColors.ink,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
@@ -7979,8 +8225,8 @@ class _AdminConsoleState extends State<AdminConsole> {
             const SizedBox(height: 22),
             Text(
               appText(context, 'Practice time', 'साधना समय'),
-              style: const TextStyle(
-                color: AppColors.ink,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
@@ -7990,8 +8236,8 @@ class _AdminConsoleState extends State<AdminConsole> {
             const SizedBox(height: 22),
             Text(
               appText(context, 'Feature interest', 'सुविधा रुचि'),
-              style: const TextStyle(
-                color: AppColors.ink,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
@@ -8003,8 +8249,8 @@ class _AdminConsoleState extends State<AdminConsole> {
             Text(
               appText(context, 'Individual practice history',
                   'व्यक्तिगत साधना-विवरण'),
-              style: const TextStyle(
-                color: AppColors.ink,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
                 fontSize: 17,
                 fontWeight: FontWeight.w900,
               ),
@@ -8048,27 +8294,30 @@ class _AdminMetric extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 150),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.offWhite,
+        color: _raisedSurfaceColor(),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: _borderColor(AppColors.border)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: AppColors.maroon),
+          Icon(icon, color: _readableColor(AppColors.maroon)),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  color: AppColors.ink,
+                style: TextStyle(
+                  color: _readableColor(AppColors.ink),
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              Text(label, style: const TextStyle(color: AppColors.taupe)),
+              Text(
+                label,
+                style: TextStyle(color: _readableColor(AppColors.taupe)),
+              ),
             ],
           ),
         ],
@@ -8108,8 +8357,8 @@ class _SevenDayActivityChart extends StatelessWidget {
                   children: [
                     Text(
                       '${counts[index]}',
-                      style: const TextStyle(
-                        color: AppColors.maroon,
+                      style: TextStyle(
+                        color: _readableColor(AppColors.maroon),
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -8129,8 +8378,8 @@ class _SevenDayActivityChart extends StatelessWidget {
                     Text(
                       DateFormat('EEE').format(days[index]),
                       maxLines: 1,
-                      style: const TextStyle(
-                        color: AppColors.taupe,
+                      style: TextStyle(
+                        color: _readableColor(AppColors.taupe),
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
@@ -8271,8 +8520,8 @@ class _MostLikedQuotes extends StatelessWidget {
         const SizedBox(height: 22),
         Text(
           appText(context, 'Most liked quotes', 'सर्वाधिक पसंद वचन'),
-          style: const TextStyle(
-            color: AppColors.ink,
+          style: TextStyle(
+            color: _readableColor(AppColors.ink),
             fontSize: 16,
             fontWeight: FontWeight.w800,
           ),
@@ -8283,10 +8532,10 @@ class _MostLikedQuotes extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.favorite_rounded,
                   size: 18,
-                  color: AppColors.crimson,
+                  color: _readableColor(AppColors.crimson),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -8294,14 +8543,14 @@ class _MostLikedQuotes extends StatelessWidget {
                     labels[entry.key] ?? entry.key,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.ink),
+                    style: TextStyle(color: _readableColor(AppColors.ink)),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Text(
                   '${entry.value}',
-                  style: const TextStyle(
-                    color: AppColors.maroon,
+                  style: TextStyle(
+                    color: _readableColor(AppColors.maroon),
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -8333,9 +8582,10 @@ class _AnalyticsBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fraction = (value / max(1, maximum)).clamp(0.0, 1.0);
+    final displayColor = _readableColor(color)!;
     return Row(
       children: [
-        Icon(icon, size: 20, color: color),
+        Icon(icon, size: 20, color: displayColor),
         const SizedBox(width: 8),
         SizedBox(
           width: 82,
@@ -8343,8 +8593,8 @@ class _AnalyticsBar extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.ink,
+            style: TextStyle(
+              color: _readableColor(AppColors.ink),
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -8355,8 +8605,8 @@ class _AnalyticsBar extends StatelessWidget {
             child: LinearProgressIndicator(
               minHeight: 12,
               value: fraction,
-              color: color,
-              backgroundColor: AppColors.rose,
+              color: displayColor,
+              backgroundColor: _surfaceColor(AppColors.rose),
             ),
           ),
         ),
@@ -8366,8 +8616,8 @@ class _AnalyticsBar extends StatelessWidget {
           child: Text(
             valueLabel,
             textAlign: TextAlign.right,
-            style: const TextStyle(
-              color: AppColors.ink,
+            style: TextStyle(
+              color: _readableColor(AppColors.ink),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -8394,14 +8644,14 @@ class _AdminUserActivityTile extends StatelessWidget {
       tilePadding: EdgeInsets.zero,
       childrenPadding: const EdgeInsets.only(bottom: 14),
       leading: CircleAvatar(
-        backgroundColor: AppColors.rose,
-        foregroundColor: AppColors.maroon,
+        backgroundColor: _surfaceColor(AppColors.rose),
+        foregroundColor: _readableColor(AppColors.maroon),
         child: Text(user.name.characters.first.toUpperCase()),
       ),
       title: Text(
         user.name,
-        style: const TextStyle(
-          color: AppColors.ink,
+        style: TextStyle(
+          color: _readableColor(AppColors.ink),
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -8446,8 +8696,8 @@ class _AdminUserActivityTile extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             appText(context, 'Recent activity', 'हाल की गतिविधि'),
-            style: const TextStyle(
-              color: AppColors.ink,
+            style: TextStyle(
+              color: _readableColor(AppColors.ink),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -8462,7 +8712,7 @@ class _AdminUserActivityTile extends StatelessWidget {
                 'No practice has been recorded from the updated app yet.',
                 'अद्यतन अनुप्रयोग से अभी कोई साधना अंकित नहीं हुई है।',
               ),
-              style: const TextStyle(color: AppColors.taupe),
+              style: TextStyle(color: _readableColor(AppColors.taupe)),
             ),
           )
         else if (user.events.isNotEmpty)
@@ -8474,8 +8724,8 @@ class _AdminUserActivityTile extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               appText(context, 'Completed practices', 'पूर्ण साधनाएँ'),
-              style: const TextStyle(
-                color: AppColors.ink,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -8518,15 +8768,15 @@ class _AdminActivityEventRow extends StatelessWidget {
                   _title(context),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.ink,
+                  style: TextStyle(
+                    color: _readableColor(AppColors.ink),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 Text(
                   details.join(' | '),
-                  style: const TextStyle(
-                    color: AppColors.taupe,
+                  style: TextStyle(
+                    color: _readableColor(AppColors.taupe),
                     fontSize: 12,
                   ),
                 ),
@@ -8605,13 +8855,13 @@ class _ActivityPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.parchment,
+        color: _surfaceColor(AppColors.parchment),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         '$label: $value',
-        style: const TextStyle(
-          color: AppColors.ink,
+        style: TextStyle(
+          color: _readableColor(AppColors.ink),
           fontSize: 13,
           fontWeight: FontWeight.w800,
         ),
@@ -8645,15 +8895,18 @@ class _AdminActivityDay extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check_circle_rounded,
-              size: 18, color: AppColors.sage),
+          Icon(
+            Icons.check_circle_rounded,
+            size: 18,
+            color: _readableColor(AppColors.sage),
+          ),
           const SizedBox(width: 8),
           SizedBox(
             width: 92,
             child: Text(
               dateLabel,
-              style: const TextStyle(
-                color: AppColors.ink,
+              style: TextStyle(
+                color: _readableColor(AppColors.ink),
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -8661,7 +8914,7 @@ class _AdminActivityDay extends StatelessWidget {
           Expanded(
             child: Text(
               completed.join(', '),
-              style: const TextStyle(color: AppColors.taupe),
+              style: TextStyle(color: _readableColor(AppColors.taupe)),
             ),
           ),
         ],
@@ -8718,8 +8971,8 @@ class _AdminQuoteListItem extends StatelessWidget {
                   children: [
                     Text(
                       timestamp,
-                      style: const TextStyle(
-                        color: AppColors.muted,
+                      style: TextStyle(
+                        color: _readableColor(AppColors.muted),
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -8730,14 +8983,14 @@ class _AdminQuoteListItem extends StatelessWidget {
                 Text(
                   quote.text,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.ink,
+                        color: _readableColor(AppColors.ink),
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '- ${quote.author}',
-                  style: const TextStyle(color: AppColors.taupe),
+                  style: TextStyle(color: _readableColor(AppColors.taupe)),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -8746,15 +8999,15 @@ class _AdminQuoteListItem extends StatelessWidget {
                       : quote.textHindi,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: quote.textHindi.trim().isEmpty
-                            ? AppColors.crimson
-                            : AppColors.ink,
+                            ? _readableColor(AppColors.crimson)
+                            : _readableColor(AppColors.ink),
                       ),
                 ),
                 if (quote.textHindi.trim().isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     '- ${quote.authorHindi}',
-                    style: const TextStyle(color: AppColors.taupe),
+                    style: TextStyle(color: _readableColor(AppColors.taupe)),
                   ),
                 ],
               ],
@@ -8879,7 +9132,7 @@ class _PageScaffold extends StatelessWidget {
     if (refresh == null) return scrollView;
     return RefreshIndicator(
       onRefresh: refresh,
-      color: AppColors.maroon,
+      color: _primaryActionColor(),
       child: scrollView,
     );
   }
@@ -8901,11 +9154,15 @@ class _ScreenTitle extends StatelessWidget {
         Container(
           width: 58,
           height: 58,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.rose,
+            color: _surfaceColor(AppColors.rose),
           ),
-          child: Icon(icon, color: AppColors.maroon, size: 31),
+          child: Icon(
+            icon,
+            color: _readableColor(AppColors.maroon),
+            size: 31,
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -8933,10 +9190,10 @@ class _IconBadge extends StatelessWidget {
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: background,
+        color: _surfaceColor(background),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(icon, color: color, size: 27),
+      child: Icon(icon, color: _readableColor(color), size: 27),
     );
   }
 }
@@ -8991,10 +9248,15 @@ class _RoutineTile extends StatelessWidget {
               height: 58,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                color: done ? AppColors.maroon : AppColors.rose,
+                color: done
+                    ? _primaryActionColor()
+                    : _surfaceColor(AppColors.rose),
               ),
               child: Icon(done ? Icons.check_rounded : icon,
-                  color: done ? AppColors.cream : AppColors.maroon, size: 30),
+                  color: done
+                      ? _onPrimaryActionColor()
+                      : _readableColor(AppColors.maroon),
+                  size: 30),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -9009,14 +9271,24 @@ class _RoutineTile extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: done ? const Color(0xFFEDF4ED) : AppColors.cream,
+                color: done
+                    ? (_appIsDark
+                        ? AppColors.darkSurfaceSoft
+                        : const Color(0xFFEDF4ED))
+                    : _surfaceColor(AppColors.cream),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: done ? const Color(0xFFD6E3D6) : AppColors.border),
+                    color: done
+                        ? (_appIsDark
+                            ? AppColors.darkSage
+                            : const Color(0xFFD6E3D6))
+                        : _borderColor(AppColors.border)),
               ),
               child: Icon(
                 done ? Icons.verified_rounded : Icons.chevron_right_rounded,
-                color: done ? AppColors.sage : AppColors.maroon,
+                color: _readableColor(
+                  done ? AppColors.sage : AppColors.maroon,
+                ),
               ),
             ),
           ],
@@ -9054,8 +9326,11 @@ class _WisdomFeature extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.format_quote_rounded,
-                  color: AppColors.gold, size: 36),
+              Icon(
+                Icons.format_quote_rounded,
+                color: _readableColor(AppColors.gold),
+                size: 36,
+              ),
               const Spacer(),
               _WisdomLikeButton(
                 quote: quote,
@@ -9085,8 +9360,8 @@ class _WisdomFeature extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             quote.author,
-            style: const TextStyle(
-              color: AppColors.maroon,
+            style: TextStyle(
+              color: _readableColor(AppColors.maroon),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -9106,24 +9381,24 @@ class _AboutHomeSection extends StatelessWidget {
         _AboutAccordionCard(
           title: appText(
             context,
-            'MAHARSHI MEHI PARAMHANS',
+            'ABOUT GURU MAHARAJ',
             'महर्षि मेंही परमहंस',
           ),
           body: appText(
             context,
-            'Maharshi Mehi Paramhans was a revered saint of Santmat. His teachings guide seekers toward inner meditation, satsang, compassion, and a life rooted in truth.',
-            'महर्षि मेंही परमहंस संतमत के पूज्य संत थे। उनकी शिक्षा साधकों को अंतर्ध्यान, सत्संग, करुणा और सत्यमय जीवन की ओर प्रेरित करती है।',
+            'Sadguru Maharshi Mehi Paramhans was one of the most respected saints and spiritual masters of the Sant Mat tradition in India. Born in Bihar, he dedicated his life to spreading the message of inner meditation, self-realization, universal love, and peace. He emphasized the practice of Surat Shabd Yoga and taught that true spirituality lies beyond caste, religion, and social divisions.\n\nThrough his profound writings, discourses, and compassionate guidance, he inspired millions of devotees to walk the path of devotion, simplicity, morality, and spiritual awakening. His teachings continue to guide seekers toward inner harmony and realization of the Divine within every soul.',
+            'सद्गुरु महर्षि मेंही परमहंस भारत की संतमत परंपरा के अत्यंत सम्मानित संत और आध्यात्मिक गुरु थे। बिहार में जन्मे महर्षि मेंही ने अपना जीवन अंतर्ध्यान, आत्म-साक्षात्कार, सार्वभौमिक प्रेम और शांति का संदेश फैलाने के लिए समर्पित किया। उन्होंने सुरत-शब्द योग की साधना पर बल दिया और सिखाया कि सच्ची आध्यात्मिकता जाति, धर्म और सामाजिक भेदभाव से परे है।\n\nअपने गहन लेखन, प्रवचनों और करुणामय मार्गदर्शन से उन्होंने लाखों भक्तों को भक्ति, सरलता, नैतिकता और आध्यात्मिक जागरण के मार्ग पर चलने के लिए प्रेरित किया। उनकी शिक्षाएं आज भी साधकों को आंतरिक सामंजस्य और प्रत्येक आत्मा में स्थित दिव्यता की अनुभूति की ओर मार्गदर्शन देती हैं।',
           ),
           accentColor: AppColors.maroon,
           icon: Icons.auto_awesome_rounded,
         ),
         const SizedBox(height: 14),
         _AboutAccordionCard(
-          title: appText(context, 'GURUVANDAN PARICHAY', 'गुरुवंदन परिचय'),
+          title: appText(context, 'ABOUT GURU VANDAN', 'गुरु वंदन परिचय'),
           body: appText(
             context,
-            'Guruvandan supports a simple daily spiritual practice through satsang, meditation, aarti, and wisdom so devotees can continue their sadhana with regularity.',
-            'गुरुवंदन सत्संग, ध्यान, आरती और ज्ञान के माध्यम से सरल दैनिक साधना में सहायक है, जिससे साधक नियमितता से अपनी साधना जारी रख सकें।',
+            'A sacred space for daily spiritual practice — satsang, meditation, Sadguru\'s wisdom and community of devotees, all in one place. Jai Guru.',
+            'दैनिक आध्यात्मिक साधना के लिए एक पावन स्थान — सत्संग, ध्यान, सद्गुरु की वाणी और भक्तों का समुदाय, सब एक ही स्थान पर। जय गुरु।',
           ),
           accentColor: AppColors.gold,
           icon: Icons.volunteer_activism_rounded,
@@ -9149,6 +9424,7 @@ class _AboutAccordionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final language = LanguageScope.of(context).language;
+    final displayAccent = _readableColor(accentColor)!;
 
     return Container(
       decoration: _cardDecoration(
@@ -9157,7 +9433,7 @@ class _AboutAccordionCard extends StatelessWidget {
       ).copyWith(
         boxShadow: [
           BoxShadow(
-            color: accentColor.withValues(alpha: 0.08),
+            color: displayAccent.withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -9169,27 +9445,27 @@ class _AboutAccordionCard extends StatelessWidget {
         maintainState: true,
         tilePadding: const EdgeInsets.fromLTRB(22, 8, 18, 8),
         childrenPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
-        iconColor: accentColor,
-        collapsedIconColor: accentColor,
+        iconColor: displayAccent,
+        collapsedIconColor: displayAccent,
         shape: const Border(),
         collapsedShape: const Border(),
         leading: Container(
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.12),
+            color: displayAccent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: accentColor.withValues(alpha: 0.22),
+              color: displayAccent.withValues(alpha: 0.22),
             ),
           ),
-          child: Icon(icon, color: accentColor, size: 23),
+          child: Icon(icon, color: displayAccent, size: 23),
         ),
         title: Text(
           title,
           style: _bodyStyle(
             language,
-            color: accentColor,
+            color: displayAccent,
             fontSize: 15,
             fontWeight: FontWeight.w900,
           ),
@@ -9224,19 +9500,26 @@ class _CompletionBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFEDF4ED),
+        color: _appIsDark ? AppColors.darkSurfaceSoft : const Color(0xFFEDF4ED),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD6E3D6)),
+        border: Border.all(
+          color: _appIsDark ? AppColors.darkSage : const Color(0xFFD6E3D6),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.verified_rounded, color: AppColors.sage),
+          Icon(
+            Icons.verified_rounded,
+            color: _readableColor(AppColors.sage),
+          ),
           const SizedBox(width: 8),
           Text(
             text,
-            style: const TextStyle(
-                color: AppColors.sage, fontWeight: FontWeight.w900),
+            style: TextStyle(
+              color: _readableColor(AppColors.sage),
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),
@@ -9275,7 +9558,9 @@ class _StatusText extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: isError ? AppColors.crimson : AppColors.sage,
+          color: _readableColor(
+            isError ? AppColors.crimson : AppColors.sage,
+          ),
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -9315,7 +9600,7 @@ class _NavBar extends StatelessWidget {
         onDestinationSelected: (index) => onSelected(PracticeTab.values[index]),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        indicatorColor: _appIsDark ? AppColors.deepCrimson : AppColors.rose,
+        indicatorColor: _appIsDark ? AppColors.darkRose : AppColors.rose,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: [
           NavigationDestination(
@@ -9387,7 +9672,7 @@ InputDecoration _inputDecoration(String label) {
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
       borderSide: BorderSide(
-        color: _appIsDark ? AppColors.gold : AppColors.maroon,
+        color: _primaryActionColor(),
         width: 1.5,
       ),
     ),
@@ -9868,13 +10153,13 @@ String _friendlyAuthMessage(
   switch (error.code) {
     case 'operation-not-allowed':
       return localized(
-        'This entrance method is not enabled. Please contact the Guruvandan administrator.',
-        'यह प्रवेश-विधि अभी सक्रिय नहीं है। कृपया गुरुवंदन प्रशासक से संपर्क करें।',
+        'This entrance method is not enabled. Please contact the Guru Vandan administrator.',
+        'यह प्रवेश-विधि अभी सक्रिय नहीं है। कृपया गुरु वंदन प्रशासक से संपर्क करें।',
       );
     case 'unauthorized-domain':
       return localized(
-        'This website is not authorized for sign-in. Please contact the Guruvandan administrator.',
-        'यह जालस्थल प्रवेश हेतु अधिकृत नहीं है। कृपया गुरुवंदन प्रशासक से संपर्क करें।',
+        'This website is not authorized for sign-in. Please contact the Guru Vandan administrator.',
+        'यह जालस्थल प्रवेश हेतु अधिकृत नहीं है। कृपया गुरु वंदन प्रशासक से संपर्क करें।',
       );
     case 'popup-closed-by-user':
     case 'cancelled-popup-request':
