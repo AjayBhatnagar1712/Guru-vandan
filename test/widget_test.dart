@@ -362,6 +362,48 @@ void main() {
     expect(practiceTop.dy, lessThan(streakTop.dy));
   });
 
+  testWidgets('Completed practice shows only the leading tick', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'guruvandan_flutter:name': 'Ajay Bhatnagar',
+      'guruvandan_flutter:language': 'english',
+      'guruvandan_flutter:routine': jsonEncode({
+        dateKey(DateTime.now()): {'meditation': true},
+      }),
+    });
+
+    await tester.pumpWidget(
+        const GuruvandanApp(firebaseReady: false, showOpening: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Enter'));
+    await tester.pumpAndSettle();
+
+    final meditationTile = find.byKey(
+      const Key('routine-tile-Meditation'),
+    );
+    expect(meditationTile, findsOneWidget);
+    expect(
+      find.descendant(
+        of: meditationTile,
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: meditationTile,
+        matching: find.byIcon(Icons.verified_rounded),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: meditationTile,
+        matching: find.byIcon(Icons.chevron_right_rounded),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('Home introductions expand only when tapped', (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));

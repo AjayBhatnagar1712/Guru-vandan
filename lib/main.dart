@@ -2249,8 +2249,13 @@ class _OpeningScenePainter extends CustomPainter {
     canvas.drawPath(hill, horizon);
 
     final foreground = Paint()
-      ..color = (isDark ? AppColors.darkRose : AppColors.deepCrimson)
-          .withValues(alpha: 0.9);
+      ..color = isDark ? const Color(0xFF8A704E) : AppColors.deepCrimson;
+    final templeOutline = Paint()
+      ..color = isDark
+          ? AppColors.darkGold.withValues(alpha: 0.82)
+          : AppColors.maroon.withValues(alpha: 0.36)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = isDark ? 2.2 : 1.2;
     final baseY = size.height * 0.82;
     final templeWidth = min(size.width * 0.48, 230.0);
     final templeLeft = (size.width - templeWidth) / 2;
@@ -2263,36 +2268,34 @@ class _OpeningScenePainter extends CustomPainter {
       ..lineTo(templeRight - templeWidth * 0.08, baseY - 74)
       ..close();
     canvas.drawPath(roof, foreground);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(templeLeft + templeWidth * 0.18, baseY - 72,
-            templeWidth * 0.64, 10),
-        const Radius.circular(3),
-      ),
-      foreground,
+    canvas.drawPath(roof, templeOutline);
+    final templeLintel = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+          templeLeft + templeWidth * 0.18, baseY - 72, templeWidth * 0.64, 10),
+      const Radius.circular(3),
     );
+    canvas.drawRRect(templeLintel, foreground);
+    canvas.drawRRect(templeLintel, templeOutline);
     for (final x in [
       templeLeft + templeWidth * 0.25,
       templeLeft + templeWidth * 0.43,
       templeLeft + templeWidth * 0.57,
       templeLeft + templeWidth * 0.75,
     ]) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x - pillarWidth / 2, baseY - 66, pillarWidth, 66),
-          const Radius.circular(4),
-        ),
-        foreground,
-      );
-    }
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-            templeLeft + templeWidth * 0.14, baseY, templeWidth * 0.72, 12),
+      final pillar = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x - pillarWidth / 2, baseY - 66, pillarWidth, 66),
         const Radius.circular(4),
-      ),
-      foreground,
+      );
+      canvas.drawRRect(pillar, foreground);
+      canvas.drawRRect(pillar, templeOutline);
+    }
+    final templeBase = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+          templeLeft + templeWidth * 0.14, baseY, templeWidth * 0.72, 12),
+      const Radius.circular(4),
     );
+    canvas.drawRRect(templeBase, foreground);
+    canvas.drawRRect(templeBase, templeOutline);
 
     final diyaCenter = Offset(size.width * 0.5, size.height * 0.9);
     final flame = Path()
@@ -9322,6 +9325,7 @@ class _RoutineTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      key: Key('routine-tile-$title'),
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Container(
@@ -9356,31 +9360,22 @@ class _RoutineTile extends StatelessWidget {
                       .titleLarge
                       ?.copyWith(fontSize: 19)),
             ),
-            const SizedBox(width: 10),
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: done
-                    ? (_appIsDark
-                        ? AppColors.darkSurfaceSoft
-                        : const Color(0xFFEDF4ED))
-                    : _surfaceColor(AppColors.cream),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: done
-                        ? (_appIsDark
-                            ? AppColors.darkSage
-                            : const Color(0xFFD6E3D6))
-                        : _borderColor(AppColors.border)),
-              ),
-              child: Icon(
-                done ? Icons.verified_rounded : Icons.chevron_right_rounded,
-                color: _readableColor(
-                  done ? AppColors.sage : AppColors.maroon,
+            if (!done) ...[
+              const SizedBox(width: 10),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _surfaceColor(AppColors.cream),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _borderColor(AppColors.border)),
+                ),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  color: _readableColor(AppColors.maroon),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
