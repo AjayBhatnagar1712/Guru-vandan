@@ -343,11 +343,13 @@ bool shouldUseRememberedAuthSession({
   required bool authStreamReady,
   required bool hasAuthenticatedUser,
   required bool hasRememberedSession,
+  required bool hasObservedAuthenticatedUser,
 }) {
   return startupComplete &&
       authStreamReady &&
       !hasAuthenticatedUser &&
-      hasRememberedSession;
+      hasRememberedSession &&
+      !hasObservedAuthenticatedUser;
 }
 
 String? legacyAuthenticatedUidFromPreferenceKeys(Iterable<String> keys) {
@@ -2801,6 +2803,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   late final Future<String?> startup = _prepareAuthStartup();
   bool keepRememberedSession = false;
+  bool hasObservedAuthenticatedUser = false;
 
   Future<String?> _prepareAuthStartup() async {
     final language = LanguageScope.of(context).language;
@@ -2875,6 +2878,7 @@ class _AuthGateState extends State<AuthGate> {
                     authSnapshot.connectionState != ConnectionState.waiting,
                 hasAuthenticatedUser: false,
                 hasRememberedSession: keepRememberedSession,
+                hasObservedAuthenticatedUser: hasObservedAuthenticatedUser,
               )) {
                 return const DevoteeShell(firebaseReady: false);
               }
@@ -2884,6 +2888,7 @@ class _AuthGateState extends State<AuthGate> {
               );
             }
 
+            hasObservedAuthenticatedUser = true;
             unawaited(_rememberAuthenticatedUser(user));
 
             return DevoteeShell(
@@ -4328,12 +4333,14 @@ class _DevoteeShellState extends State<DevoteeShell>
     await _finishSatsangActivity();
     await _stopBackgroundAudio();
     try {
-      await _forgetAuthenticatedUser();
       if (Firebase.apps.isNotEmpty) {
-        await _signOutFromGoogleProvider();
         await FirebaseAuth.instance.signOut();
+        await _signOutFromGoogleProvider();
       }
     } finally {
+      // Clear this last so a pending authenticated-user callback cannot
+      // recreate the remembered session after Firebase has signed out.
+      await _forgetAuthenticatedUser();
       if (mounted) {
         setState(() => showSignInAfterLogout = true);
       }

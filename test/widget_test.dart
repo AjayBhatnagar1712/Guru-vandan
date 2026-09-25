@@ -529,6 +529,7 @@ void main() {
         authStreamReady: true,
         hasAuthenticatedUser: false,
         hasRememberedSession: true,
+        hasObservedAuthenticatedUser: false,
       ),
       isTrue,
     );
@@ -538,6 +539,7 @@ void main() {
         authStreamReady: true,
         hasAuthenticatedUser: false,
         hasRememberedSession: false,
+        hasObservedAuthenticatedUser: false,
       ),
       isFalse,
     );
@@ -547,8 +549,20 @@ void main() {
         authStreamReady: true,
         hasAuthenticatedUser: false,
         hasRememberedSession: true,
+        hasObservedAuthenticatedUser: false,
       ),
       isFalse,
+    );
+    expect(
+      shouldUseRememberedAuthSession(
+        startupComplete: true,
+        authStreamReady: true,
+        hasAuthenticatedUser: false,
+        hasRememberedSession: true,
+        hasObservedAuthenticatedUser: true,
+      ),
+      isFalse,
+      reason: 'A real session that signed out must not fall back to Home.',
     );
   });
 
