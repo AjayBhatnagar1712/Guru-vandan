@@ -7,8 +7,13 @@
         ],
         "components": [
           {
-            "/": "/quote/*",
-            "comment": "Open shared Guru Vandan quote links in the installed iOS app."
+            "/": "/admin.html",
+            "exclude": true,
+            "comment": "Keep the Guru Vandan admin portal in the browser."
+          },
+          {
+            "/": "/*",
+            "comment": "Open Guru Vandan and shared quote links in the installed iOS app."
           }
         ]
       }

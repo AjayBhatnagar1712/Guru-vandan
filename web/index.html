@@ -1,59 +1,178 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <base href="$FLUTTER_BASE_HREF" />
     <meta charset="UTF-8" />
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
-    <meta name="description" content="Guru Vandan brings daily satsang, meditation, aarti and wisdom from Maharshi Mehi Paramhans to the web, Android and iPhone." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Guru Vandan is a sacred digital space for daily satsang, meditation, aarti and the wisdom of Maharshi Mehi Paramhans." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Guru Vandan" />
-    <meta property="og:title" content="Guru Vandan" />
-    <meta property="og:description" content="Daily satsang, meditation, aarti and wisdom from Maharshi Mehi Paramhans." />
-    <meta property="og:url" content="https://guru-vandan.web.app/" />
-    <meta property="og:image" content="https://guru-vandan.web.app/icons/Icon-512.png" />
-    <meta property="og:image:width" content="512" />
-    <meta property="og:image:height" content="512" />
+    <meta property="og:title" content="Guru Vandan – Satsang, Meditation & Daily Wisdom" />
+    <meta property="og:description" content="Walk the path of remembrance with satsang, meditation, aarti and the wisdom of Maharshi Mehi Paramhans." />
+    <meta property="og:url" content="https://guruvandan.com/" />
+    <meta property="og:image" content="https://guruvandan.com/assets/assets/images/app_icon.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="1200" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="apple-itunes-app" content="app-id=6807657972, app-argument=guruvandan://home" />
-    <meta name="theme-color" content="#7b171d" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="canonical" href="https://guru-vandan.web.app/" />
-    <link rel="manifest" href="manifest.json" />
-    <link rel="icon" type="image/png" href="icons/Icon-192.png" />
-    <title>Guru Vandan</title>
-    <style>
-      html, body { margin: 0; min-height: 100%; background: #fbf6ec; }
-      #web-loading {
-        position: fixed;
-        inset: 0;
-        z-index: 1;
-        display: grid;
-        place-items: center;
-        background: radial-gradient(circle at 50% 35%, #fffdf8, #f5e7cf);
-        color: #7b171d;
-        font-family: Georgia, serif;
-        transition: opacity .2s ease;
+    <meta name="theme-color" content="#74171d" />
+    <link rel="canonical" href="https://guruvandan.com/" />
+    <link rel="icon" type="image/png" href="assets/assets/images/chakra_logo.png" />
+    <link rel="stylesheet" href="site.css" />
+    <title>Guru Vandan – Satsang, Meditation & Daily Wisdom</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "name": "Guru Vandan",
+            "url": "https://guruvandan.com/",
+            "description": "A sacred digital space for satsang, meditation, aarti and the wisdom of Maharshi Mehi Paramhans."
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Guru Vandan",
+            "applicationCategory": "LifestyleApplication",
+            "operatingSystem": "Android, iOS",
+            "url": "https://guruvandan.com/",
+            "downloadUrl": [
+              "https://play.google.com/store/apps/details?id=com.ivar.guruvandan",
+              "https://apps.apple.com/app/id6807657972"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "INR"
+            }
+          }
+        ]
       }
-      #web-loading div { text-align: center; }
-      #web-loading img { width: 112px; height: 112px; border-radius: 28px; box-shadow: 0 14px 34px rgba(84,16,20,.15); }
-      #web-loading p { margin: 18px 0 0; font-size: 28px; font-weight: 700; }
-    </style>
+    </script>
   </head>
   <body>
-    <div id="web-loading" aria-label="Loading Guru Vandan">
-      <div>
-        <img src="icons/Icon-192.png" alt="" />
-        <p>Guru Vandan</p>
+    <header class="site-header">
+      <a class="brand" href="#home" aria-label="Guru Vandan home">
+        <img src="assets/assets/images/chakra_logo.png" alt="" />
+        <span>Guru Vandan</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#gurudev">Gurudev</a>
+        <a href="#guruvandan">Guru Vandan</a>
+        <a class="nav-download" href="#download">Download</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="home">
+        <div class="hero-copy">
+          <p class="eyebrow">सत्संग · ध्यान · आरती · सद्गुरु-वाणी</p>
+          <h1>A sacred rhythm of remembrance.</h1>
+          <p class="hero-text">
+            Carry the teachings of Maharshi Mehi Paramhans into your daily life through
+            satsang, meditation, aarti and timeless wisdom.
+          </p>
+          <div class="store-actions" aria-label="Download Guru Vandan">
+            <a class="store-button" href="https://play.google.com/store/apps/details?id=com.ivar.guruvandan" rel="noopener">
+              <span class="store-icon play-icon" aria-hidden="true"></span>
+              <span><small>GET IT ON</small>Google Play</span>
+            </a>
+            <a class="store-button" href="https://apps.apple.com/app/id6807657972" rel="noopener">
+              <span class="store-icon apple-icon" aria-hidden="true">●</span>
+              <span><small>DOWNLOAD ON THE</small>App Store</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="guru-portrait-wrap" aria-label="Maharshi Mehi Paramhans">
+          <div class="portrait-halo"></div>
+          <figure class="guru-portrait">
+            <img src="assets/assets/images/guru_image.jpeg" alt="Maharshi Mehi Paramhans" />
+            <figcaption>
+              <span>Maharshi Mehi Paramhans</span>
+              <small>Sant Mat spiritual master</small>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="gurudev-section" id="gurudev">
+        <div class="section-mark" aria-hidden="true">ॐ</div>
+        <div class="section-heading">
+          <p class="eyebrow">About Gurudev</p>
+          <h2>Maharshi Mehi Paramhans</h2>
+        </div>
+        <div class="gurudev-copy">
+          <p>
+            Maharshi Mehi Paramhans was one of the most respected saints and spiritual
+            masters of the Sant Mat tradition in India. Born in Bihar, he dedicated his
+            life to spreading the message of inner meditation, self-realization,
+            universal love and peace. He emphasized the practice of Surat Shabd Yoga
+            and taught that true spirituality lies beyond caste, religion and social
+            divisions.
+          </p>
+          <p>
+            Through his profound writings, discourses and compassionate guidance, he
+            inspired millions of devotees to walk the path of devotion, simplicity,
+            morality and spiritual awakening. His teachings continue to guide seekers
+            toward inner harmony and realization of the Divine within every soul.
+          </p>
+        </div>
+      </section>
+
+      <section class="about-app" id="guruvandan">
+        <div class="app-symbol">
+          <img src="assets/assets/images/chakra_logo.png" alt="Guru Vandan chakra symbol" />
+        </div>
+        <div class="about-copy">
+          <p class="eyebrow">About Guru Vandan</p>
+          <h2>Your daily sacred practice, held in one place.</h2>
+          <p>
+            Guru Vandan is a quiet companion for satsang, meditation, aarti and
+            Maharshi Mehi Paramhans&rsquo;s wisdom. Build a steady spiritual rhythm,
+            revisit daily teachings and carry your practice wherever you go.
+          </p>
+          <div class="practice-list" aria-label="Guru Vandan practices">
+            <span>Satsang</span>
+            <span>Meditation</span>
+            <span>Aarti</span>
+            <span>Daily Wisdom</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="download-section" id="download">
+        <img src="assets/assets/images/chakra_logo.png" alt="" />
+        <p class="eyebrow">Begin your practice</p>
+        <h2>Keep Guru Vandan close.</h2>
+        <p>Available for Android and iPhone.</p>
+        <div class="store-actions centered">
+          <a class="store-button" href="https://play.google.com/store/apps/details?id=com.ivar.guruvandan" rel="noopener">
+            <span class="store-icon play-icon" aria-hidden="true"></span>
+            <span><small>GET IT ON</small>Google Play</span>
+          </a>
+          <a class="store-button" href="https://apps.apple.com/app/id6807657972" rel="noopener">
+            <span class="store-icon apple-icon" aria-hidden="true">●</span>
+            <span><small>DOWNLOAD ON THE</small>App Store</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-brand">
+        <img src="assets/assets/images/chakra_logo.png" alt="" />
+        <span>Guru Vandan</span>
       </div>
-    </div>
-    <script>
-      window.addEventListener('flutter-first-frame', () => {
-        const loading = document.getElementById('web-loading');
-        if (!loading) return;
-        loading.style.opacity = '0';
-        setTimeout(() => loading.remove(), 220);
-      });
-    </script>
-    <script src="flutter_bootstrap.js" async></script>
+      <div class="footer-links">
+        <a href="privacy-policy.html">Privacy</a>
+        <a href="support.html">Support</a>
+        <a href="account-deletion.html">Delete account</a>
+      </div>
+      <p>&copy; 2026 Guru Vandan</p>
+    </footer>
+
+    <script src="app_redirect.js"></script>
   </body>
 </html>

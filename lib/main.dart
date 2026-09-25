@@ -25,7 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const allowedAdminEmail = 'guruvandan11@trustkeyper.com';
 const appShareLink = String.fromEnvironment(
   'GURU_VANDAN_WEB_URL',
-  defaultValue: 'https://guru-vandan.web.app',
+  defaultValue: 'https://guruvandan.com',
 );
 const androidStoreLink =
     'https://play.google.com/store/apps/details?id=com.ivar.guruvandan';
@@ -2167,7 +2167,7 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
     maxLines: 1,
   );
   drawText(
-    'Guru Vandan',
+    'guruvandan.com',
     const Rect.fromLTWH(860, 524, 260, 36),
     const TextStyle(
       color: Color(0xFF6D5D55),

@@ -358,7 +358,7 @@ void main() {
     const quote = WisdomQuote(id: 'firebase-quote-1', text: 'A quote');
     expect(
       wisdomQuoteShareLink(quote),
-      'https://guru-vandan.web.app/quote/firebase-quote-1/',
+      'https://guruvandan.com/quote/firebase-quote-1/',
     );
     final shareText = wisdomQuoteShareText(context, quote);
     expect(shareText, contains(quote.text));

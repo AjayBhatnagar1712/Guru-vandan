@@ -7,7 +7,14 @@
   "theme_color": "#8B1A1A",
   "description": "Satsang, meditation, Maharshi Mehi Paramhans wisdom, and spiritual practice.",
   "orientation": "portrait-primary",
-  "prefer_related_applications": false,
+  "prefer_related_applications": true,
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.ivar.guruvandan",
+      "url": "https://play.google.com/store/apps/details?id=com.ivar.guruvandan"
+    }
+  ],
   "icons": [
     {
       "src": "icons/Icon-192.png",
