@@ -19,7 +19,27 @@
     <meta name="theme-color" content="#74171d" />
     <link rel="canonical" href="https://guruvandan.com/" />
     <link rel="icon" type="image/png" href="/assets/assets/images/chakra_logo.png" />
-    <link rel="stylesheet" href="/site.css" />
+    <link rel="stylesheet" href="/site.css?v=2" />
+    <script>
+      (() => {
+        const cacheVersion = 'guru-vandan-public-site-v2';
+        if (localStorage.getItem(cacheVersion)) return;
+
+        const removeWorkers = 'serviceWorker' in navigator
+          ? navigator.serviceWorker.getRegistrations().then((registrations) =>
+              Promise.all(registrations.map((registration) => registration.unregister())),
+            )
+          : Promise.resolve();
+        const removeCaches = 'caches' in window
+          ? caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+          : Promise.resolve();
+
+        Promise.all([removeWorkers, removeCaches]).finally(() => {
+          localStorage.setItem(cacheVersion, '1');
+          if (navigator.serviceWorker?.controller) window.location.reload();
+        });
+      })();
+    </script>
     <title>Guru Vandan – Satsang, Meditation & Daily Wisdom</title>
     <script type="application/ld+json">
       {
@@ -229,7 +249,7 @@
       <p>&copy; 2026 Guru Vandan</p>
     </footer>
 
-    <script src="/quote_page.js"></script>
-    <script src="/app_redirect.js"></script>
+    <script src="/quote_page.js?v=2"></script>
+    <script src="/app_redirect.js?v=2"></script>
   </body>
 </html>
