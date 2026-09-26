@@ -2097,7 +2097,7 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
     rect: portraitClip.outerRect,
     image: portraitFrame.image,
     fit: BoxFit.cover,
-    alignment: const Alignment(0, -0.18),
+    alignment: Alignment.topCenter,
     filterQuality: FilterQuality.high,
   );
   canvas.drawRect(
@@ -2110,6 +2110,14 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
       ),
   );
   canvas.restore();
+
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(
+      const Rect.fromLTWH(68, 64, 350, 74),
+      const Radius.circular(20),
+    ),
+    Paint()..color = const Color(0xB83C1014),
+  );
 
   final logoData = await rootBundle.load('assets/images/chakra_logo.png');
   final codec = await ui.instantiateImageCodec(
@@ -2141,12 +2149,19 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
 
   drawText(
     'GURU VANDAN',
-    const Rect.fromLTWH(82, 76, 650, 48),
+    const Rect.fromLTWH(94, 76, 300, 48),
     const TextStyle(
-      color: Color(0xFFFFF4DE),
+      color: Color(0xFFFFE6A8),
       fontSize: 28,
       fontWeight: FontWeight.w800,
       letterSpacing: 3.2,
+      shadows: [
+        Shadow(
+          color: Color(0x99000000),
+          offset: Offset(0, 2),
+          blurRadius: 5,
+        ),
+      ],
     ),
   );
   drawText(
