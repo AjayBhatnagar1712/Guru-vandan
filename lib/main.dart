@@ -2053,8 +2053,8 @@ Future<bool> shareWisdomQuote(BuildContext context, WisdomQuote quote) async {
 }
 
 Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
-  const width = 1200.0;
-  const height = 630.0;
+  const width = 1080.0;
+  const height = 1350.0;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   final bounds = const Rect.fromLTWH(0, 0, width, height);
@@ -2062,45 +2062,62 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
     ..shader = ui.Gradient.linear(
       const Offset(0, 0),
       const Offset(width, height),
-      const [Color(0xFFFFFAF1), Color(0xFFF4E2C4)],
+      const [Color(0xFFFFFBF3), Color(0xFFF2E5D2)],
     );
   canvas.drawRect(bounds, background);
 
   final panel = RRect.fromRectAndRadius(
-    const Rect.fromLTWH(34, 34, 1132, 562),
-    const Radius.circular(30),
+    const Rect.fromLTWH(38, 38, 1004, 1274),
+    const Radius.circular(38),
   );
   canvas.drawRRect(panel, Paint()..color = const Color(0xFFFFFDF9));
   canvas.drawRRect(
     panel,
     Paint()
-      ..color = const Color(0xFFD9C2AA)
+      ..color = const Color(0xFFD8C4AD)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3,
+      ..strokeWidth = 2,
   );
 
-  final header = RRect.fromRectAndCorners(
-    const Rect.fromLTWH(34, 34, 1132, 142),
-    topLeft: const Radius.circular(30),
-    topRight: const Radius.circular(30),
+  final portraitData = await rootBundle.load('assets/images/guru_image.jpeg');
+  final portraitCodec = await ui.instantiateImageCodec(
+    portraitData.buffer.asUint8List(),
+    targetWidth: 1004,
   );
-  canvas.drawRRect(header, Paint()..color = const Color(0xFF7B171D));
+  final portraitFrame = await portraitCodec.getNextFrame();
+  final portraitClip = RRect.fromRectAndCorners(
+    const Rect.fromLTWH(38, 38, 1004, 530),
+    topLeft: const Radius.circular(38),
+    topRight: const Radius.circular(38),
+  );
+  canvas.save();
+  canvas.clipRRect(portraitClip);
+  paintImage(
+    canvas: canvas,
+    rect: portraitClip.outerRect,
+    image: portraitFrame.image,
+    fit: BoxFit.cover,
+    alignment: const Alignment(0, -0.18),
+    filterQuality: FilterQuality.high,
+  );
+  canvas.drawRect(
+    const Rect.fromLTWH(38, 330, 1004, 238),
+    Paint()
+      ..shader = ui.Gradient.linear(
+        const Offset(0, 330),
+        const Offset(0, 568),
+        const [Color(0x001F0D0C), Color(0xC73C1014)],
+      ),
+  );
+  canvas.restore();
 
   final logoData = await rootBundle.load('assets/images/chakra_logo.png');
   final codec = await ui.instantiateImageCodec(
     logoData.buffer.asUint8List(),
-    targetWidth: 118,
-    targetHeight: 118,
+    targetWidth: 92,
+    targetHeight: 116,
   );
   final logoFrame = await codec.getNextFrame();
-  const logoRect = Rect.fromLTWH(1012, 43, 84, 118);
-  paintImage(
-    canvas: canvas,
-    rect: logoRect,
-    image: logoFrame.image,
-    fit: BoxFit.contain,
-    filterQuality: FilterQuality.high,
-  );
 
   void drawText(
     String value,
@@ -2116,66 +2133,116 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
       maxLines: maxLines,
       ellipsis: maxLines == null ? null : '…',
     )..layout(maxWidth: area.width);
-    painter.paint(canvas, area.topLeft);
+    painter.paint(
+      canvas,
+      Offset(area.left, area.top + ((area.height - painter.height) / 2)),
+    );
   }
 
   drawText(
     'GURU VANDAN',
-    const Rect.fromLTWH(78, 68, 850, 60),
+    const Rect.fromLTWH(82, 76, 650, 48),
     const TextStyle(
-      color: Color(0xFFF2D193),
-      fontSize: 42,
+      color: Color(0xFFFFF4DE),
+      fontSize: 28,
       fontWeight: FontWeight.w800,
-      letterSpacing: 2.2,
+      letterSpacing: 3.2,
     ),
   );
   drawText(
-    'QUOTE OF THE DAY',
-    const Rect.fromLTWH(78, 188, 900, 42),
+    'PARAMHANS MAHARSHI MEHI',
+    const Rect.fromLTWH(88, 448, 904, 74),
     const TextStyle(
-      color: Color(0xFFC28C2C),
-      fontSize: 25,
+      color: Color(0xFFFFF4DE),
+      fontSize: 38,
       fontWeight: FontWeight.w800,
-      letterSpacing: 1.3,
+      letterSpacing: 1.8,
     ),
+    maxLines: 1,
+    align: TextAlign.center,
+  );
+  drawText(
+    '“',
+    const Rect.fromLTWH(420, 574, 240, 92),
+    const TextStyle(
+      color: Color(0xFFD4A446),
+      fontSize: 108,
+      fontWeight: FontWeight.w700,
+      height: 0.85,
+    ),
+    maxLines: 1,
+    align: TextAlign.center,
   );
 
-  final quoteSize = quote.text.length < 110
-      ? 50.0
-      : quote.text.length < 190
-          ? 41.0
-          : 34.0;
+  final quoteSize = quote.text.length < 105
+      ? 55.0
+      : quote.text.length < 180
+          ? 45.0
+          : quote.text.length < 260
+              ? 37.0
+              : 31.0;
   drawText(
-    '“${quote.text}”',
-    const Rect.fromLTWH(78, 246, 1044, 230),
+    quote.text,
+    const Rect.fromLTWH(112, 655, 856, 346),
     TextStyle(
       color: const Color(0xFF2B211F),
       fontSize: quoteSize,
       fontWeight: FontWeight.w700,
-      height: 1.16,
+      height: 1.28,
     ),
-    maxLines: 5,
+    maxLines: 7,
+    align: TextAlign.center,
+  );
+  final containsHindi = RegExp(r'[\u0900-\u097F]').hasMatch(quote.text);
+  drawText(
+    containsHindi ? 'परमहंस महर्षि मेंही' : 'Paramhans Maharshi Mehi',
+    const Rect.fromLTWH(140, 1017, 800, 56),
+    TextStyle(
+      color: Color(0xFF7B171D),
+      fontSize: containsHindi ? 31 : 28,
+      fontWeight: FontWeight.w800,
+      letterSpacing: containsHindi ? 0 : 1.1,
+    ),
+    maxLines: 2,
+    align: TextAlign.center,
+  );
+
+  canvas.drawLine(
+    const Offset(160, 1120),
+    const Offset(920, 1120),
+    Paint()
+      ..color = const Color(0xFFE2D3C2)
+      ..strokeWidth = 2,
+  );
+
+  const footerLogoRect = Rect.fromLTWH(294, 1150, 76, 104);
+  paintImage(
+    canvas: canvas,
+    rect: footerLogoRect,
+    image: logoFrame.image,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.high,
   );
   drawText(
-    quote.author,
-    const Rect.fromLTWH(78, 520, 760, 44),
+    'SHARED FROM',
+    const Rect.fromLTWH(398, 1160, 390, 30),
     const TextStyle(
-      color: Color(0xFF7B171D),
-      fontSize: 28,
+      color: Color(0xFF806D63),
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 5,
+    ),
+    maxLines: 1,
+  );
+  drawText(
+    'Guru Vandan App',
+    const Rect.fromLTWH(396, 1196, 470, 58),
+    const TextStyle(
+      color: Color(0xFF3C1014),
+      fontSize: 38,
       fontWeight: FontWeight.w800,
     ),
     maxLines: 1,
-  );
-  drawText(
-    'guruvandan.com',
-    const Rect.fromLTWH(860, 524, 260, 36),
-    const TextStyle(
-      color: Color(0xFF6D5D55),
-      fontSize: 22,
-      fontWeight: FontWeight.w600,
-    ),
-    maxLines: 1,
-    align: TextAlign.right,
   );
 
   final image = await recorder.endRecording().toImage(
@@ -2183,6 +2250,7 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
         height.toInt(),
       );
   final png = await image.toByteData(format: ui.ImageByteFormat.png);
+  portraitFrame.image.dispose();
   logoFrame.image.dispose();
   image.dispose();
   if (png == null) throw StateError('Could not create the quote share card.');

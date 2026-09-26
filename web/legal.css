@@ -121,6 +121,29 @@ li {
   text-decoration: none;
 }
 
+.nav-shop {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid rgba(139, 23, 28, 0.22);
+  border-radius: 999px;
+  color: var(--crimson);
+  background: rgba(201, 154, 53, 0.12);
+  font-weight: 800;
+}
+
+.nav-shop small {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: white;
+  background: var(--crimson);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .section {
   margin-top: 20px;
   padding: 26px;

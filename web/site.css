@@ -101,6 +101,28 @@ nav a:hover { color: var(--maroon); }
   background: transparent;
 }
 
+.nav-shop-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid rgba(116, 23, 29, 0.18);
+  border-radius: 12px;
+  color: var(--maroon);
+  background: rgba(212, 164, 70, 0.12);
+  cursor: default;
+}
+
+.nav-shop-link small {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #fff8e8;
+  background: var(--maroon);
+  font-size: 0.56rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .hero {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
@@ -681,6 +703,18 @@ footer > p { justify-self: end; }
     padding: 7px 8px;
     border-radius: 9px;
     font-size: 0.65rem;
+  }
+
+  .nav-shop-link {
+    gap: 4px;
+    padding: 6px 7px;
+    border-radius: 9px;
+    font-size: 0.65rem;
+  }
+
+  .nav-shop-link small {
+    padding: 1px 4px;
+    font-size: 0.45rem;
   }
 
   .hero,
