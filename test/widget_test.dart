@@ -93,7 +93,7 @@ void main() {
     expect(quote.text, 'Meditation brings clarity.');
     expect(quote.textHindi, 'ध्यान स्पष्टता लाता है।');
     expect(quote.author, 'Maharshi Mehi Paramhans');
-    expect(quote.authorHindi, 'महर्षि मेंही परमहंस');
+    expect(quote.authorHindi, 'महर्षि मेँहीँ परमहंस');
     expect(quote.createdAt, 1234);
   });
 

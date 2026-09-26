@@ -45,7 +45,7 @@
 
   function normalizedHindiAuthor(value) {
     const author = String(value || '').trim();
-    if (!author || author === 'सद्गुरु महाराज') return 'महर्षि मेंही परमहंस';
+    if (!author || author === 'सद्गुरु महाराज') return 'महर्षि मेँहीँ परमहंस';
     return author;
   }
 

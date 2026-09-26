@@ -1066,7 +1066,7 @@ class WisdomQuote {
     required this.text,
     this.textHindi = '',
     this.author = 'Maharshi Mehi Paramhans',
-    this.authorHindi = 'महर्षि मेंही परमहंस',
+    this.authorHindi = 'महर्षि मेँहीँ परमहंस',
     this.active = true,
     this.createdAt,
     this.scheduledDate,
@@ -1107,7 +1107,7 @@ class WisdomQuote {
           ? 'Maharshi Mehi Paramhans'
           : rawAuthor,
       authorHindi: rawAuthorHindi.isEmpty || rawAuthorHindi == 'सद्गुरु महाराज'
-          ? 'महर्षि मेंही परमहंस'
+          ? 'महर्षि मेँहीँ परमहंस'
           : rawAuthorHindi,
       active: value['active'] != false,
       createdAt: value['createdAt'] is int ? value['createdAt'] as int : null,
@@ -1919,7 +1919,7 @@ WisdomQuote localizedWisdomQuote(
       text: quote.textHindi,
       textHindi: quote.textHindi,
       author: quote.authorHindi.trim().isEmpty
-          ? 'महर्षि मेंही परमहंस'
+          ? 'महर्षि मेँहीँ परमहंस'
           : quote.authorHindi,
       authorHindi: quote.authorHindi,
       active: quote.active,
@@ -1933,7 +1933,7 @@ WisdomQuote localizedWisdomQuote(
       return WisdomQuote(
         id: quote.id,
         text: 'सरल हृदय से गुरु-स्मरण करें; प्रत्येक चरण पूजा बन जाता है।',
-        author: 'महर्षि मेंही परमहंस',
+        author: 'महर्षि मेँहीँ परमहंस',
         active: quote.active,
         createdAt: quote.createdAt,
         scheduledDate: quote.scheduledDate,
@@ -1942,7 +1942,7 @@ WisdomQuote localizedWisdomQuote(
       return WisdomQuote(
         id: quote.id,
         text: 'दिवस का आरंभ और समापन सत्संग में हो तो हृदय कोमल हो जाता है।',
-        author: 'महर्षि मेंही परमहंस',
+        author: 'महर्षि मेँहीँ परमहंस',
         active: quote.active,
         createdAt: quote.createdAt,
         scheduledDate: quote.scheduledDate,
@@ -1952,7 +1952,7 @@ WisdomQuote localizedWisdomQuote(
         id: quote.id,
         text:
             'ध्यान जीवन से विमुखता नहीं; यह अंतःस्थित दिव्य प्रकाश में पुनरागमन है।',
-        author: 'महर्षि मेंही परमहंस',
+        author: 'महर्षि मेँहीँ परमहंस',
         active: quote.active,
         createdAt: quote.createdAt,
         scheduledDate: quote.scheduledDate,
@@ -1963,7 +1963,7 @@ WisdomQuote localizedWisdomQuote(
         return WisdomQuote(
           id: quote.id,
           text: quote.text,
-          author: 'महर्षि मेंही परमहंस',
+          author: 'महर्षि मेँहीँ परमहंस',
           active: quote.active,
           createdAt: quote.createdAt,
           scheduledDate: quote.scheduledDate,
@@ -2165,18 +2165,6 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
     ),
   );
   drawText(
-    'PARAMHANS MAHARSHI MEHI',
-    const Rect.fromLTWH(88, 448, 904, 74),
-    const TextStyle(
-      color: Color(0xFFFFF4DE),
-      fontSize: 38,
-      fontWeight: FontWeight.w800,
-      letterSpacing: 1.8,
-    ),
-    maxLines: 1,
-    align: TextAlign.center,
-  );
-  drawText(
     '“',
     const Rect.fromLTWH(420, 574, 240, 92),
     const TextStyle(
@@ -2210,7 +2198,7 @@ Future<Uint8List> _buildWisdomShareCard(WisdomQuote quote) async {
   );
   final containsHindi = RegExp(r'[\u0900-\u097F]').hasMatch(quote.text);
   drawText(
-    containsHindi ? 'परमहंस महर्षि मेंही' : 'Paramhans Maharshi Mehi',
+    containsHindi ? 'परमहंस महर्षि मेँहीँ' : 'Paramhans Maharshi Mehi',
     const Rect.fromLTWH(140, 1017, 800, 56),
     TextStyle(
       color: Color(0xFF7B171D),
@@ -8664,7 +8652,7 @@ class _AdminConsoleState extends State<AdminConsole> {
   final quoteEnglish = TextEditingController();
   final quoteHindi = TextEditingController();
   final authorEnglish = TextEditingController(text: 'Maharshi Mehi Paramhans');
-  final authorHindi = TextEditingController(text: 'महर्षि मेंही परमहंस');
+  final authorHindi = TextEditingController(text: 'महर्षि मेँहीँ परमहंस');
   final userSearch = TextEditingController();
 
   bool busy = false;
@@ -8735,7 +8723,7 @@ class _AdminConsoleState extends State<AdminConsole> {
             ? 'Maharshi Mehi Paramhans'
             : authorEnglish.text.trim(),
         authorHindi: authorHindi.text.trim().isEmpty
-            ? 'महर्षि मेंही परमहंस'
+            ? 'महर्षि मेँहीँ परमहंस'
             : authorHindi.text.trim(),
       );
       quoteEnglish.clear();
@@ -8866,7 +8854,7 @@ class _AdminConsoleState extends State<AdminConsole> {
                       ? 'Maharshi Mehi Paramhans'
                       : englishAuthor.text.trim(),
                   authorHindi: hindiAuthor.text.trim().isEmpty
-                      ? 'महर्षि मेंही परमहंस'
+                      ? 'महर्षि मेँहीँ परमहंस'
                       : hindiAuthor.text.trim(),
                 ),
               );
@@ -9044,7 +9032,7 @@ class _AdminConsoleState extends State<AdminConsole> {
         appText(
           context,
           'Both forms are required so each devotee receives the teaching in their chosen language.',
-          'प्रत्येक भक्त को चयनित भाषा में महर्षि मेंही परमहंस वाणी प्राप्त हो, इस हेतु दोनों रूप आवश्यक हैं।',
+          'प्रत्येक भक्त को चयनित भाषा में महर्षि मेँहीँ परमहंस वाणी प्राप्त हो, इस हेतु दोनों रूप आवश्यक हैं।',
         ),
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 15),
       ),
@@ -10802,12 +10790,12 @@ class _AboutHomeSection extends StatelessWidget {
           title: appText(
             context,
             'ABOUT GURU MAHARAJ',
-            'महर्षि मेंही परमहंस',
+            'महर्षि मेँहीँ परमहंस',
           ),
           body: appText(
             context,
             'Sadguru Maharshi Mehi Paramhans was one of the most respected saints and spiritual masters of the Sant Mat tradition in India. Born in Bihar, he dedicated his life to spreading the message of inner meditation, self-realization, universal love, and peace. He emphasized the practice of Surat Shabd Yoga and taught that true spirituality lies beyond caste, religion, and social divisions.\n\nThrough his profound writings, discourses, and compassionate guidance, he inspired millions of devotees to walk the path of devotion, simplicity, morality, and spiritual awakening. His teachings continue to guide seekers toward inner harmony and realization of the Divine within every soul.',
-            'सद्गुरु महर्षि मेंही परमहंस भारत की संतमत परंपरा के अत्यंत सम्मानित संत और आध्यात्मिक गुरु थे। बिहार में जन्मे महर्षि मेंही ने अपना जीवन अंतर्ध्यान, आत्म-साक्षात्कार, सार्वभौमिक प्रेम और शांति का संदेश फैलाने के लिए समर्पित किया। उन्होंने सुरत-शब्द योग की साधना पर बल दिया और सिखाया कि सच्ची आध्यात्मिकता जाति, धर्म और सामाजिक भेदभाव से परे है।\n\nअपने गहन लेखन, प्रवचनों और करुणामय मार्गदर्शन से उन्होंने लाखों भक्तों को भक्ति, सरलता, नैतिकता और आध्यात्मिक जागरण के मार्ग पर चलने के लिए प्रेरित किया। उनकी शिक्षाएं आज भी साधकों को आंतरिक सामंजस्य और प्रत्येक आत्मा में स्थित दिव्यता की अनुभूति की ओर मार्गदर्शन देती हैं।',
+            'सद्गुरु महर्षि मेँहीँ परमहंस भारत की संतमत परंपरा के अत्यंत सम्मानित संत और आध्यात्मिक गुरु थे। बिहार में जन्मे महर्षि मेँहीँ ने अपना जीवन अंतर्ध्यान, आत्म-साक्षात्कार, सार्वभौमिक प्रेम और शांति का संदेश फैलाने के लिए समर्पित किया। उन्होंने सुरत-शब्द योग की साधना पर बल दिया और सिखाया कि सच्ची आध्यात्मिकता जाति, धर्म और सामाजिक भेदभाव से परे है।\n\nअपने गहन लेखन, प्रवचनों और करुणामय मार्गदर्शन से उन्होंने लाखों भक्तों को भक्ति, सरलता, नैतिकता और आध्यात्मिक जागरण के मार्ग पर चलने के लिए प्रेरित किया। उनकी शिक्षाएं आज भी साधकों को आंतरिक सामंजस्य और प्रत्येक आत्मा में स्थित दिव्यता की अनुभूति की ओर मार्गदर्शन देती हैं।',
           ),
           accentColor: AppColors.maroon,
           icon: Icons.auto_awesome_rounded,

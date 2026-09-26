@@ -104,23 +104,11 @@ nav a:hover { color: var(--maroon); }
 .nav-shop-link {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   padding: 8px 12px;
   border: 1px solid rgba(116, 23, 29, 0.18);
   border-radius: 12px;
   color: var(--maroon);
   background: rgba(212, 164, 70, 0.12);
-  cursor: default;
-}
-
-.nav-shop-link small {
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: #fff8e8;
-  background: var(--maroon);
-  font-size: 0.56rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .hero {
@@ -429,6 +417,56 @@ h2 {
 
 .centered { justify-content: center; }
 
+.coming-soon-page {
+  display: grid;
+  place-items: center;
+  width: min(920px, calc(100% - 32px));
+  min-height: calc(100vh - 230px);
+  margin: 0 auto;
+  padding: 72px 0;
+}
+
+.coming-soon-card {
+  width: 100%;
+  padding: clamp(42px, 8vw, 86px) 24px;
+  border: 1px solid rgba(116, 23, 29, 0.14);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(212, 164, 70, 0.2), transparent 16rem),
+    var(--paper);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.coming-soon-card > img {
+  width: 82px;
+  height: 112px;
+  object-fit: contain;
+}
+
+.coming-soon-card h1 {
+  max-width: none;
+  margin: 12px 0 18px;
+  color: var(--maroon-deep);
+  font-size: clamp(3rem, 8vw, 6rem);
+}
+
+.coming-soon-card > p:not(.eyebrow) {
+  max-width: 520px;
+  margin: 0 auto 28px;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.home-link {
+  display: inline-flex;
+  padding: 11px 18px;
+  border-radius: 13px;
+  color: white;
+  background: var(--maroon);
+  font-weight: 800;
+}
+
 .quote-page {
   width: min(1120px, calc(100% - 44px));
   margin: 0 auto;
@@ -676,6 +714,9 @@ footer > p { justify-self: end; }
 
 @media (max-width: 560px) {
   .site-header {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
     width: calc(100% - 24px);
     margin-top: 10px;
     padding: 10px 10px 10px 12px;
@@ -683,9 +724,11 @@ footer > p { justify-self: end; }
   }
 
   .brand {
+    justify-content: center;
     gap: 7px;
+    width: 100%;
     min-width: 0;
-    font-size: 1rem;
+    font-size: 1.1rem;
     white-space: nowrap;
   }
 
@@ -695,7 +738,10 @@ footer > p { justify-self: end; }
   }
 
   nav {
-    flex: 0 0 auto;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
     gap: 6px;
   }
 
@@ -706,15 +752,9 @@ footer > p { justify-self: end; }
   }
 
   .nav-shop-link {
-    gap: 4px;
-    padding: 6px 7px;
+    padding: 7px 10px;
     border-radius: 9px;
     font-size: 0.65rem;
-  }
-
-  .nav-shop-link small {
-    padding: 1px 4px;
-    font-size: 0.45rem;
   }
 
   .hero,
