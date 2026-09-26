@@ -17,6 +17,10 @@
   const quoteIndex = pathParts.indexOf('quote');
   const quoteId = quoteIndex >= 0 ? pathParts[quoteIndex + 1] : null;
   const isHome = pathParts.length === 0;
+  // Installed apps already receive verified quote links through Android App
+  // Links and iOS Universal Links. Keep the browser fallback on the bilingual
+  // quote page so visitors without the app can read it before choosing a store.
+  if (quoteId) return;
   if (!isHome && !quoteId) return;
 
   const handoffKey = 'guru-vandan-mobile-handoff';

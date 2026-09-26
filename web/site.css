@@ -88,11 +88,17 @@ nav {
 
 nav a:hover { color: var(--maroon); }
 
-.nav-download {
-  padding: 10px 18px;
+.nav-store-link {
+  padding: 9px 14px;
+  border: 1px solid var(--maroon);
   border-radius: 12px;
   color: white;
   background: var(--maroon);
+}
+
+.nav-store-link-light {
+  color: var(--maroon);
+  background: transparent;
 }
 
 .hero {
@@ -401,9 +407,186 @@ h2 {
 
 .centered { justify-content: center; }
 
+.quote-page {
+  width: min(1120px, calc(100% - 44px));
+  margin: 0 auto;
+  padding: 76px 0 110px;
+}
+
+.quote-stage {
+  position: relative;
+}
+
+.quote-intro {
+  max-width: 760px;
+  margin: 0 auto 38px;
+  text-align: center;
+}
+
+.quote-intro > img {
+  width: 68px;
+  height: 90px;
+  margin-bottom: 16px;
+  object-fit: contain;
+}
+
+.quote-intro h1 {
+  font-size: clamp(2.7rem, 6vw, 5.4rem);
+  overflow-wrap: anywhere;
+}
+
+.quote-intro > p:last-child {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.bilingual-quote-card {
+  position: relative;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: clamp(32px, 6vw, 72px);
+  overflow: hidden;
+  border: 1px solid rgba(116, 23, 29, 0.16);
+  border-radius: 36px;
+  background:
+    radial-gradient(circle at 95% 5%, rgba(212, 164, 70, 0.2), transparent 18rem),
+    var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.bilingual-quote-card::before,
+.bilingual-quote-card::after {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border: 1px solid rgba(116, 23, 29, 0.07);
+  border-radius: 50%;
+  content: "";
+}
+
+.bilingual-quote-card::before {
+  top: -90px;
+  right: -65px;
+}
+
+.bilingual-quote-card::after {
+  bottom: -110px;
+  left: -80px;
+}
+
+.quote-language-block {
+  position: relative;
+  z-index: 1;
+}
+
+.language-label {
+  display: inline-flex;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--maroon);
+  background: #f4e3df;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quote-language-block blockquote {
+  margin: 24px 0 20px;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 4.5vw, 3.7rem);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.quote-language-block blockquote::before {
+  color: var(--gold);
+  content: "“";
+}
+
+.quote-language-block blockquote::after {
+  color: var(--gold);
+  content: "”";
+}
+
+.quote-author {
+  margin: 0;
+  color: var(--maroon);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.quote-language-hindi blockquote {
+  font-family: "Noto Serif Devanagari", "Nirmala UI", Mangal, serif;
+  font-size: clamp(1.8rem, 4vw, 3.35rem);
+  line-height: 1.38;
+}
+
+.quote-divider {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr;
+  align-items: center;
+  gap: 14px;
+  margin: 46px 0;
+}
+
+.quote-divider span {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(116, 23, 29, 0.28));
+}
+
+.quote-divider span:last-child {
+  background: linear-gradient(90deg, rgba(116, 23, 29, 0.28), transparent);
+}
+
+.quote-divider img {
+  width: 44px;
+  height: 54px;
+  object-fit: contain;
+}
+
+.quote-app-invitation {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 40px;
+  max-width: 900px;
+  margin: 28px auto 0;
+  padding: 30px;
+  border-radius: 28px;
+  color: #f8efe2;
+  background: linear-gradient(135deg, var(--maroon-deep), #6c171c);
+  box-shadow: 0 22px 50px rgba(60, 16, 20, 0.2);
+}
+
+.quote-app-invitation .eyebrow {
+  color: var(--gold-light);
+}
+
+.quote-app-invitation h2 {
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+}
+
+.quote-app-invitation p:last-child {
+  margin-bottom: 0;
+  color: #d9cac1;
+}
+
+.quote-app-invitation .store-actions {
+  max-width: 215px;
+}
+
+.quote-app-invitation .store-button {
+  width: 100%;
+  border-color: rgba(240, 216, 154, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+}
+
 footer {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto auto 1fr;
   align-items: center;
   gap: 24px;
   padding: 26px max(28px, calc((100% - 1140px) / 2));
@@ -414,10 +597,23 @@ footer {
 }
 
 .footer-links { display: flex; gap: 22px; }
+.footer-store-links { display: flex; gap: 10px; }
+
+.footer-store-links a {
+  padding: 8px 12px;
+  border: 1px solid rgba(116, 23, 29, 0.2);
+  border-radius: 10px;
+  color: var(--maroon);
+  font-weight: 750;
+}
+
+.footer-brand > a {
+  display: inline-flex;
+}
 footer > p { justify-self: end; }
 
 @media (max-width: 900px) {
-  nav a:not(.nav-download) { display: none; }
+  .nav-section-link { display: none; }
 
   .hero {
     grid-template-columns: 1fr;
@@ -444,25 +640,47 @@ footer > p { justify-self: end; }
   }
 
   footer > p { justify-self: center; }
+
+  .quote-app-invitation {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .quote-app-invitation .store-actions {
+    justify-self: center;
+    max-width: 440px;
+  }
 }
 
 @media (max-width: 560px) {
   .site-header {
     width: calc(100% - 24px);
     margin-top: 10px;
+    padding: 10px 10px 10px 12px;
     border-radius: 18px;
   }
 
-  .brand { font-size: 1.1rem; }
+  .brand {
+    gap: 7px;
+    min-width: 0;
+    font-size: 1rem;
+    white-space: nowrap;
+  }
 
   .brand img {
     width: 28px;
     height: 34px;
   }
 
-  .nav-download {
-    padding: 8px 13px;
-    font-size: 0.78rem;
+  nav {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .nav-store-link {
+    padding: 7px 8px;
+    border-radius: 9px;
+    font-size: 0.65rem;
   }
 
   .hero,
@@ -509,6 +727,40 @@ footer > p { justify-self: end; }
   .app-symbol { min-height: 330px; }
 
   .footer-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .quote-page {
+    width: calc(100% - 24px);
+    padding: 54px 0 76px;
+  }
+
+  .quote-intro h1 {
+    font-size: clamp(2rem, 10vw, 2.55rem);
+    line-height: 1.08;
+  }
+
+  .bilingual-quote-card {
+    padding: 28px 22px;
+    border-radius: 26px;
+  }
+
+  .quote-language-block blockquote,
+  .quote-language-hindi blockquote {
+    font-size: clamp(1.5rem, 7vw, 1.8rem);
+  }
+
+  .quote-divider {
+    margin: 34px 0;
+  }
+
+  .quote-app-invitation {
+    padding: 28px 20px;
+    border-radius: 24px;
+  }
+
+  .footer-store-links {
     flex-wrap: wrap;
     justify-content: center;
   }

@@ -18,8 +18,8 @@
     <meta name="apple-itunes-app" content="app-id=6807657972, app-argument=guruvandan://home" />
     <meta name="theme-color" content="#74171d" />
     <link rel="canonical" href="https://guruvandan.com/" />
-    <link rel="icon" type="image/png" href="assets/assets/images/chakra_logo.png" />
-    <link rel="stylesheet" href="site.css" />
+    <link rel="icon" type="image/png" href="/assets/assets/images/chakra_logo.png" />
+    <link rel="stylesheet" href="/site.css" />
     <title>Guru Vandan – Satsang, Meditation & Daily Wisdom</title>
     <script type="application/ld+json">
       {
@@ -53,18 +53,19 @@
   </head>
   <body>
     <header class="site-header">
-      <a class="brand" href="#home" aria-label="Guru Vandan home">
-        <img src="assets/assets/images/chakra_logo.png" alt="" />
+      <a class="brand" href="/" aria-label="Guru Vandan home">
+        <img src="/assets/assets/images/chakra_logo.png" alt="" />
         <span>Guru Vandan</span>
       </a>
       <nav aria-label="Main navigation">
-        <a href="#gurudev">Gurudev</a>
-        <a href="#guruvandan">Guru Vandan</a>
-        <a class="nav-download" href="#download">Download</a>
+        <a class="nav-section-link" href="/#gurudev">Gurudev</a>
+        <a class="nav-section-link" href="/#guruvandan">Guru Vandan</a>
+        <a class="nav-store-link" href="https://play.google.com/store/apps/details?id=com.ivar.guruvandan" rel="noopener">Play Store</a>
+        <a class="nav-store-link nav-store-link-light" href="https://apps.apple.com/app/id6807657972" rel="noopener">App Store</a>
       </nav>
     </header>
 
-    <main>
+    <main id="landing-page">
       <section class="hero" id="home">
         <div class="hero-copy">
           <p class="eyebrow">सत्संग · ध्यान · आरती · सद्गुरु-वाणी</p>
@@ -88,7 +89,7 @@
         <div class="guru-portrait-wrap" aria-label="Maharshi Mehi Paramhans">
           <div class="portrait-halo"></div>
           <figure class="guru-portrait">
-            <img src="assets/assets/images/guru_image.jpeg" alt="Maharshi Mehi Paramhans" />
+            <img src="/assets/assets/images/guru_image.jpeg" alt="Maharshi Mehi Paramhans" />
             <figcaption>
               <span>Maharshi Mehi Paramhans</span>
               <small>Sant Mat spiritual master</small>
@@ -123,7 +124,7 @@
 
       <section class="about-app" id="guruvandan">
         <div class="app-symbol">
-          <img src="assets/assets/images/chakra_logo.png" alt="Guru Vandan chakra symbol" />
+          <img src="/assets/assets/images/chakra_logo.png" alt="Guru Vandan chakra symbol" />
         </div>
         <div class="about-copy">
           <p class="eyebrow">About Guru Vandan</p>
@@ -143,7 +144,7 @@
       </section>
 
       <section class="download-section" id="download">
-        <img src="assets/assets/images/chakra_logo.png" alt="" />
+        <img src="/assets/assets/images/chakra_logo.png" alt="" />
         <p class="eyebrow">Begin your practice</p>
         <h2>Keep Guru Vandan close.</h2>
         <p>Available for Android and iPhone.</p>
@@ -160,19 +161,75 @@
       </section>
     </main>
 
+    <main id="quote-page" class="quote-page" hidden>
+      <section class="quote-stage">
+        <div class="quote-intro">
+          <img src="/assets/assets/images/chakra_logo.png" alt="Guru Vandan chakra symbol" />
+          <p class="eyebrow">Guru Vani · गुरु वाणी</p>
+          <h1>A thought for the soul.</h1>
+          <p>Read this shared teaching in English and Hindi.</p>
+        </div>
+
+        <article class="bilingual-quote-card" aria-live="polite">
+          <div class="quote-language-block">
+            <span class="language-label">English</span>
+            <blockquote id="quote-english">Loading the shared quote…</blockquote>
+            <p id="quote-author-english" class="quote-author">Maharshi Mehi Paramhans</p>
+          </div>
+
+          <div class="quote-divider" aria-hidden="true">
+            <span></span>
+            <img src="/assets/assets/images/chakra_logo.png" alt="" />
+            <span></span>
+          </div>
+
+          <div class="quote-language-block quote-language-hindi" lang="hi">
+            <span class="language-label">हिन्दी</span>
+            <blockquote id="quote-hindi">साझा वचन लोड हो रहा है…</blockquote>
+            <p id="quote-author-hindi" class="quote-author">महर्षि मेंही परमहंस</p>
+          </div>
+        </article>
+
+        <aside class="quote-app-invitation">
+          <div>
+            <p class="eyebrow">Continue with Guru Vandan</p>
+            <h2>Keep sacred wisdom close.</h2>
+            <p>Explore daily satsang, meditation, aarti and Guru Vani in the app.</p>
+          </div>
+          <div class="store-actions">
+            <a class="store-button" href="https://play.google.com/store/apps/details?id=com.ivar.guruvandan" rel="noopener">
+              <span class="store-icon play-icon" aria-hidden="true"></span>
+              <span><small>GET IT ON</small>Google Play</span>
+            </a>
+            <a class="store-button" href="https://apps.apple.com/app/id6807657972" rel="noopener">
+              <span class="store-icon apple-icon" aria-hidden="true">●</span>
+              <span><small>DOWNLOAD ON THE</small>App Store</span>
+            </a>
+          </div>
+        </aside>
+      </section>
+    </main>
+
     <footer>
       <div class="footer-brand">
-        <img src="assets/assets/images/chakra_logo.png" alt="" />
+        <a href="/" aria-label="Guru Vandan home">
+          <img src="/assets/assets/images/chakra_logo.png" alt="" />
+        </a>
         <span>Guru Vandan</span>
       </div>
+      <div class="footer-store-links" aria-label="Download Guru Vandan">
+        <a href="https://play.google.com/store/apps/details?id=com.ivar.guruvandan" rel="noopener">Google Play</a>
+        <a href="https://apps.apple.com/app/id6807657972" rel="noopener">App Store</a>
+      </div>
       <div class="footer-links">
-        <a href="privacy-policy.html">Privacy</a>
-        <a href="support.html">Support</a>
-        <a href="account-deletion.html">Delete account</a>
+        <a href="/privacy-policy.html">Privacy</a>
+        <a href="/support.html">Support</a>
+        <a href="/account-deletion.html">Delete account</a>
       </div>
       <p>&copy; 2026 Guru Vandan</p>
     </footer>
 
-    <script src="app_redirect.js"></script>
+    <script src="/quote_page.js"></script>
+    <script src="/app_redirect.js"></script>
   </body>
 </html>
